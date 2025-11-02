@@ -2,16 +2,15 @@ import React, { useState } from 'react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from './ui/dialog';
-import { Label } from './ui/label';
-import { Textarea } from './ui/textarea';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from './ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Badge } from './ui/badge';
-import { Search, Plus, Pencil, Trash2, Eye, X } from 'lucide-react';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
+import { Search, Eye, ShieldBan, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 
 type Visibility = 'public' | 'private';
-type ServiceStatus = 'open' | 'closed' | 'pending';
+type ServiceStatus = 'open' | 'closed' | 'pending' | 'banned';
 
 interface Service {
   id: string;
@@ -103,7 +102,7 @@ const mockServices: Service[] = [
     time: 240,
     slot: 120,
     visibility: 'public',
-    status: 'closed',
+    status: 'banned',
     tags: ['Việc nhà', 'Nội trợ', 'Chăm sóc'],
     created_at: '2025-02-05',
     updated_at: '2025-02-15',
@@ -114,22 +113,8 @@ export function ServicesManagement() {
   const [services, setServices] = useState<Service[]>(mockServices);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [editingService, setEditingService] = useState<Service | null>(null);
   const [viewingService, setViewingService] = useState<Service | null>(null);
-  const [formData, setFormData] = useState({
-    user_id: '',
-    title: '',
-    description: '',
-    region_code: '',
-    place: '',
-    preferred_start: '',
-    time: '',
-    slot: '60',
-    visibility: 'public' as Visibility,
-    status: 'open' as ServiceStatus,
-    tags: [] as string[],
-  });
+  const [confirmAction, setConfirmAction] = useState<{ serviceId: string; action: 'ban' | 'unban' } | null>(null);
 
   const filteredServices = services.filter((service) => {
     const matchesSearch =
@@ -141,112 +126,38 @@ export function ServicesManagement() {
     return matchesSearch && matchesStatus;
   });
 
-  const resetForm = () => {
-    setFormData({
-      user_id: '',
-      title: '',
-      description: '',
-      region_code: '',
-      place: '',
-      preferred_start: '',
-      time: '',
-      slot: '60',
-      visibility: 'public',
-      status: 'open',
-      tags: [],
-    });
-  };
-
-  const handleAdd = () => {
-    if (!formData.title || !formData.user_id || !formData.place || !formData.time) {
-      toast.error('Vui lòng điền đầy đủ thông tin bắt buộc');
-      return;
-    }
-
-    const newService: Service = {
-      id: `srv_${Date.now()}`,
-      user_id: formData.user_id,
-      title: formData.title,
-      description: formData.description,
-      region_code: formData.region_code,
-      place: formData.place,
-      preferred_start: formData.preferred_start,
-      time: parseInt(formData.time),
-      slot: parseInt(formData.slot),
-      visibility: formData.visibility,
-      status: formData.status,
-      tags: formData.tags,
-      created_at: new Date().toISOString().split('T')[0],
-      updated_at: new Date().toISOString().split('T')[0],
-    };
-
-    setServices([...services, newService]);
-    resetForm();
-    setIsAddDialogOpen(false);
-    toast.success('Thêm dịch vụ thành công');
-  };
-
-  const handleEdit = () => {
-    if (!editingService || !formData.title || !formData.user_id || !formData.place || !formData.time) {
-      toast.error('Vui lòng điền đầy đủ thông tin bắt buộc');
-      return;
-    }
-
+  const handleBan = (serviceId: string) => {
     setServices(
       services.map((service) =>
-        service.id === editingService.id
-          ? {
-              ...service,
-              user_id: formData.user_id,
-              title: formData.title,
-              description: formData.description,
-              region_code: formData.region_code,
-              place: formData.place,
-              preferred_start: formData.preferred_start,
-              time: parseInt(formData.time),
-              slot: parseInt(formData.slot),
-              visibility: formData.visibility,
-              status: formData.status,
-              tags: formData.tags,
-              updated_at: new Date().toISOString().split('T')[0],
-            }
+        service.id === serviceId
+          ? { ...service, status: 'banned' as const, updated_at: new Date().toISOString().split('T')[0] }
           : service
       )
     );
-    setEditingService(null);
-    resetForm();
-    toast.success('Cập nhật dịch vụ thành công');
+    setConfirmAction(null);
+    toast.success('Đã cấm dịch vụ');
   };
 
-  const handleDelete = (serviceId: string) => {
-    setServices(services.filter((service) => service.id !== serviceId));
-    toast.success('Xóa dịch vụ thành công');
+  const handleUnban = (serviceId: string) => {
+    setServices(
+      services.map((service) =>
+        service.id === serviceId
+          ? { ...service, status: 'open' as const, updated_at: new Date().toISOString().split('T')[0] }
+          : service
+      )
+    );
+    setConfirmAction(null);
+    toast.success('Đã bỏ cấm dịch vụ');
   };
 
-  const openEditDialog = (service: Service) => {
-    setEditingService(service);
-    setFormData({
-      user_id: service.user_id,
-      title: service.title,
-      description: service.description || '',
-      region_code: service.region_code || '',
-      place: service.place,
-      preferred_start: service.preferred_start || '',
-      time: service.time.toString(),
-      slot: service.slot.toString(),
-      visibility: service.visibility,
-      status: service.status,
-      tags: service.tags || [],
-    });
-  };
-
-  const toggleTag = (tag: string) => {
-    setFormData(prev => ({
-      ...prev,
-      tags: prev.tags.includes(tag)
-        ? prev.tags.filter(t => t !== tag)
-        : [...prev.tags, tag]
-    }));
+  const confirmBanUnban = () => {
+    if (confirmAction) {
+      if (confirmAction.action === 'ban') {
+        handleBan(confirmAction.serviceId);
+      } else {
+        handleUnban(confirmAction.serviceId);
+      }
+    }
   };
 
   const getStatusBadge = (status: ServiceStatus) => {
@@ -254,159 +165,10 @@ export function ServicesManagement() {
       open: { label: 'Đang mở', variant: 'default' },
       pending: { label: 'Chờ duyệt', variant: 'secondary' },
       closed: { label: 'Đã đóng', variant: 'destructive' },
+      banned: { label: 'Đã cấm', variant: 'destructive' },
     };
-    return <Badge variant={variants[status].variant}>{variants[status].label}</Badge>;
+    return <Badge variant={variants[status].variant} className="w-24 justify-center">{variants[status].label}</Badge>;
   };
-
-  const ServiceForm = () => (
-    <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="user_id">User ID *</Label>
-          <Input
-            id="user_id"
-            value={formData.user_id}
-            onChange={(e) => setFormData({ ...formData, user_id: e.target.value })}
-            placeholder="usr_123"
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="region_code">Mã vùng</Label>
-          <Input
-            id="region_code"
-            value={formData.region_code}
-            onChange={(e) => setFormData({ ...formData, region_code: e.target.value })}
-            placeholder="HN, HCM, DN..."
-            maxLength={32}
-          />
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="title">Tiêu đề *</Label>
-        <Input
-          id="title"
-          value={formData.title}
-          onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-          placeholder="Nhập tiêu đề dịch vụ"
-          maxLength={120}
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="description">Mô tả</Label>
-        <Textarea
-          id="description"
-          value={formData.description}
-          onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-          placeholder="Nhập mô tả chi tiết"
-          rows={3}
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="place">Địa điểm *</Label>
-        <Input
-          id="place"
-          value={formData.place}
-          onChange={(e) => setFormData({ ...formData, place: e.target.value })}
-          placeholder="Nhập địa điểm"
-          maxLength={255}
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="preferred_start">Thời gian bắt đầu ưu tiên</Label>
-        <Input
-          id="preferred_start"
-          type="datetime-local"
-          value={formData.preferred_start}
-          onChange={(e) => setFormData({ ...formData, preferred_start: e.target.value })}
-        />
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="time">Thời gian (phút) *</Label>
-          <Input
-            id="time"
-            type="number"
-            value={formData.time}
-            onChange={(e) => setFormData({ ...formData, time: e.target.value })}
-            placeholder="60"
-            min="1"
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="slot">Slot (phút)</Label>
-          <Input
-            id="slot"
-            type="number"
-            value={formData.slot}
-            onChange={(e) => setFormData({ ...formData, slot: e.target.value })}
-            placeholder="60"
-            min="1"
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="visibility">Hiển thị</Label>
-          <Select
-            value={formData.visibility}
-            onValueChange={(value) => setFormData({ ...formData, visibility: value as Visibility })}
-          >
-            <SelectTrigger id="visibility">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="public">Công khai</SelectItem>
-              <SelectItem value="private">Riêng tư</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="status">Trạng thái</Label>
-          <Select
-            value={formData.status}
-            onValueChange={(value) => setFormData({ ...formData, status: value as ServiceStatus })}
-          >
-            <SelectTrigger id="status">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="open">Đang mở</SelectItem>
-              <SelectItem value="pending">Chờ duyệt</SelectItem>
-              <SelectItem value="closed">Đã đóng</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <Label>Tags</Label>
-        <div className="flex flex-wrap gap-2">
-          {availableTags.map((tag) => (
-            <Badge
-              key={tag}
-              variant={formData.tags.includes(tag) ? 'default' : 'outline'}
-              className="cursor-pointer"
-              onClick={() => toggleTag(tag)}
-            >
-              {tag}
-              {formData.tags.includes(tag) && <X className="w-3 h-3 ml-1" />}
-            </Badge>
-          ))}
-        </div>
-        {formData.tags.length > 0 && (
-          <p className="text-sm text-muted-foreground">
-            Đã chọn: {formData.tags.join(', ')}
-          </p>
-        )}
-      </div>
-    </div>
-  );
 
   return (
     <div className="p-6 space-y-6">
@@ -415,26 +177,6 @@ export function ServicesManagement() {
           <h2 className="text-3xl mb-2">Quản lý dịch vụ</h2>
           <p className="text-muted-foreground">Quản lý các dịch vụ trong hệ thống</p>
         </div>
-        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={resetForm}>
-              <Plus className="w-4 h-4 mr-2" />
-              Thêm dịch vụ
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Thêm dịch vụ mới</DialogTitle>
-            </DialogHeader>
-            <ServiceForm />
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
-                Hủy
-              </Button>
-              <Button onClick={handleAdd}>Thêm</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3">
@@ -456,6 +198,7 @@ export function ServicesManagement() {
             <SelectItem value="open">Đang mở</SelectItem>
             <SelectItem value="pending">Chờ duyệt</SelectItem>
             <SelectItem value="closed">Đã đóng</SelectItem>
+            <SelectItem value="banned">Đã cấm</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -469,7 +212,7 @@ export function ServicesManagement() {
               <TableHead>Địa điểm</TableHead>
               <TableHead>Tags</TableHead>
               <TableHead>Trạng thái</TableHead>
-              <TableHead className="text-right">Thao tác</TableHead>
+              <TableHead className="text-center">Thao tác</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -500,8 +243,8 @@ export function ServicesManagement() {
                     </div>
                   </TableCell>
                   <TableCell>{getStatusBadge(service.status)}</TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
+                  <TableCell className="text-center">
+                    <div className="flex justify-center gap-2">
                       <Button
                         variant="ghost"
                         size="icon"
@@ -509,50 +252,27 @@ export function ServicesManagement() {
                       >
                         <Eye className="w-4 h-4" />
                       </Button>
-                      <Dialog
-                        open={editingService?.id === service.id}
-                        onOpenChange={(open) => {
-                          if (!open) {
-                            setEditingService(null);
-                            resetForm();
-                          }
-                        }}
-                      >
-                        <DialogTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => openEditDialog(service)}
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent className="max-w-2xl">
-                          <DialogHeader>
-                            <DialogTitle>Chỉnh sửa dịch vụ</DialogTitle>
-                          </DialogHeader>
-                          <ServiceForm />
-                          <DialogFooter>
-                            <Button
-                              variant="outline"
-                              onClick={() => {
-                                setEditingService(null);
-                                resetForm();
-                              }}
-                            >
-                              Hủy
-                            </Button>
-                            <Button onClick={handleEdit}>Cập nhật</Button>
-                          </DialogFooter>
-                        </DialogContent>
-                      </Dialog>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDelete(service.id)}
-                      >
-                        <Trash2 className="w-4 h-4 text-destructive" />
-                      </Button>
+                      {service.status !== 'banned' ? (
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => setConfirmAction({ serviceId: service.id, action: 'ban' })}
+                          className="w-28"
+                        >
+                          <ShieldBan className="w-4 h-4 mr-2" />
+                          Cấm
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setConfirmAction({ serviceId: service.id, action: 'unban' })}
+                          className="w-28"
+                        >
+                          <ShieldCheck className="w-4 h-4 mr-2" />
+                          Bỏ cấm
+                        </Button>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -653,6 +373,25 @@ export function ServicesManagement() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!confirmAction} onOpenChange={(open) => !open && setConfirmAction(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Xác nhận hành động</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmAction?.action === 'ban'
+                ? 'Bạn có chắc chắn muốn cấm dịch vụ này? Dịch vụ sẽ không hiển thị trong hệ thống.'
+                : 'Bạn có chắc chắn muốn bỏ cấm dịch vụ này? Dịch vụ sẽ được hiển thị và mở trở lại.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Hủy</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmBanUnban}>
+              Xác nhận
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

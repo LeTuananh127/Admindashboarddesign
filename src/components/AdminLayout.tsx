@@ -1,17 +1,19 @@
 import React from 'react';
-import { LayoutDashboard, Users, Settings, Menu } from 'lucide-react';
+import { LayoutDashboard, Users, Settings, Menu, LogOut } from 'lucide-react';
 import { Button } from './ui/button';
 import { Sheet, SheetContent, SheetTrigger } from './ui/sheet';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from './ui/alert-dialog';
 
 type Page = 'dashboard' | 'users' | 'services';
 
 interface AdminLayoutProps {
   currentPage: Page;
   onPageChange: (page: Page) => void;
+  onLogout: () => void;
   children: React.ReactNode;
 }
 
-export function AdminLayout({ currentPage, onPageChange, children }: AdminLayoutProps) {
+export function AdminLayout({ currentPage, onPageChange, onLogout, children }: AdminLayoutProps) {
   const menuItems = [
     { id: 'dashboard' as Page, label: 'Trang chủ', icon: LayoutDashboard },
     { id: 'users' as Page, label: 'Quản lý tài khoản', icon: Users },
@@ -42,6 +44,30 @@ export function AdminLayout({ currentPage, onPageChange, children }: AdminLayout
           );
         })}
       </nav>
+      <div className="p-4 border-t">
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button variant="destructive" className="w-full">
+              <LogOut className="w-4 h-4 mr-2" />
+              Đăng xuất
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Xác nhận đăng xuất</AlertDialogTitle>
+              <AlertDialogDescription>
+                Bạn có chắc chắn muốn đăng xuất khỏi hệ thống?
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Hủy</AlertDialogCancel>
+              <AlertDialogAction onClick={onLogout}>
+                Đăng xuất
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
     </div>
   );
 
