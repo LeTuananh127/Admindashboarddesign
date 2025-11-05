@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
@@ -7,147 +7,84 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Badge } from './ui/badge';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
 import { Search, Eye, ShieldBan, ShieldCheck } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
-
-type Visibility = 'public' | 'private';
-type ServiceStatus = 'open' | 'closed' | 'pending' | 'banned';
-
-interface Service {
-  id: string;
-  user_id: string;
-  title: string;
-  description: string;
-  region_code: string;
-  place: string;
-  preferred_start: string;
-  time: number;
-  slot: number;
-  visibility: Visibility;
-  status: ServiceStatus;
-  tags: string[];
-  created_at: string;
-  updated_at: string;
-}
-
-const availableTags = [
-  'Việc nhà',
-  'Nội trợ',
-  'Sửa chữa',
-  'Giáo dục',
-  'Thiết kế',
-  'Công nghệ',
-  'Y tế',
-  'Tư vấn',
-  'Vận chuyển',
-  'Chăm sóc',
-];
-
-const mockServices: Service[] = [
-  {
-    id: 'srv_1',
-    user_id: 'usr_1',
-    title: 'Dịch vụ sửa chữa điện tử',
-    description: 'Sửa chữa các thiết bị điện tử, điện thoại, máy tính',
-    region_code: 'HN',
-    place: 'Hà Nội',
-    preferred_start: '2025-10-25T09:00',
-    time: 120,
-    slot: 60,
-    visibility: 'public',
-    status: 'open',
-    tags: ['Sửa chữa', 'Công nghệ'],
-    created_at: '2025-01-15',
-    updated_at: '2025-01-15',
-  },
-  {
-    id: 'srv_2',
-    user_id: 'usr_2',
-    title: 'Dạy kèm tiếng Anh',
-    description: 'Dạy kèm tiếng Anh cho học sinh cấp 2, cấp 3',
-    region_code: 'HCM',
-    place: 'TP. Hồ Chí Minh',
-    preferred_start: '2025-10-26T14:00',
-    time: 90,
-    slot: 45,
-    visibility: 'public',
-    status: 'open',
-    tags: ['Giáo dục'],
-    created_at: '2025-01-20',
-    updated_at: '2025-02-01',
-  },
-  {
-    id: 'srv_3',
-    user_id: 'usr_3',
-    title: 'Thiết kế đồ họa',
-    description: 'Thiết kế logo, banner, poster chuyên nghiệp',
-    region_code: 'DN',
-    place: 'Đà Nẵng',
-    preferred_start: '2025-10-27T10:00',
-    time: 180,
-    slot: 90,
-    visibility: 'private',
-    status: 'pending',
-    tags: ['Thiết kế', 'Công nghệ'],
-    created_at: '2025-02-01',
-    updated_at: '2025-02-10',
-  },
-  {
-    id: 'srv_4',
-    user_id: 'usr_1',
-    title: 'Giúp việc nhà theo giờ',
-    description: 'Dọn dẹp nhà cửa, nấu ăn, giặt là',
-    region_code: 'HN',
-    place: 'Hà Nội',
-    preferred_start: '2025-10-28T08:00',
-    time: 240,
-    slot: 120,
-    visibility: 'public',
-    status: 'banned',
-    tags: ['Việc nhà', 'Nội trợ', 'Chăm sóc'],
-    created_at: '2025-02-05',
-    updated_at: '2025-02-15',
-  },
-];
+import { toast } from 'sonner';
+import { getAllJobs, blockJob, unblockJob, Job, JobStatus } from '../lib/jobs.api';
 
 export function ServicesManagement() {
-  const [services, setServices] = useState<Service[]>(mockServices);
+  const [services, setServices] = useState<Job[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
-  const [viewingService, setViewingService] = useState<Service | null>(null);
+  const [viewingService, setViewingService] = useState<Job | null>(null);
   const [confirmAction, setConfirmAction] = useState<{ serviceId: string; action: 'ban' | 'unban' } | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const pageSize = 10;
 
-  const filteredServices = services.filter((service) => {
-    const matchesSearch =
-      service.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      service.place.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      service.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      service.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
-    const matchesStatus = filterStatus === 'all' || service.status === filterStatus;
-    return matchesSearch && matchesStatus;
-  });
+  // Load jobs khi component mount hoặc khi thay đổi page/filter
+  useEffect(() => {
+    console.log('🔍 ServicesManagement mounted');
+    console.log('  Access Token:', localStorage.getItem('access_token'));
+    loadJobs();
+  }, [currentPage, filterStatus]);
 
-  const handleBan = (serviceId: string) => {
-    setServices(
-      services.map((service) =>
-        service.id === serviceId
-          ? { ...service, status: 'banned' as const, updated_at: new Date().toISOString().split('T')[0] }
-          : service
-      )
-    );
-    setConfirmAction(null);
-    toast.success('Đã cấm dịch vụ');
+  const loadJobs = async () => {
+    try {
+      console.log('📡 Loading jobs...');
+      setIsLoading(true);
+      const statusFilter = filterStatus !== 'all' ? [filterStatus as JobStatus] : undefined;
+      const response = await getAllJobs({
+        page: currentPage,
+        pageSize: pageSize,
+        sortBy: 'created_at',
+        sortOrder: 'desc',
+        type: statusFilter,
+      });
+      console.log('✅ Jobs loaded:', response.data.length);
+      
+      setServices(response.data);
+      setTotalPages(response.metadata.totalPages);
+    } catch (error: any) {
+      console.error('❌ Load jobs failed:', error);
+      toast.error(error.message || 'Không thể tải danh sách dịch vụ');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleUnban = (serviceId: string) => {
-    setServices(
-      services.map((service) =>
-        service.id === serviceId
-          ? { ...service, status: 'open' as const, updated_at: new Date().toISOString().split('T')[0] }
-          : service
-      )
-    );
-    setConfirmAction(null);
-    toast.success('Đã bỏ cấm dịch vụ');
+  const filteredServices = services.filter((service) => {
+    if (!searchTerm) return true;
+    
+    const matchesSearch =
+      service.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      service.place?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      service.id.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    return matchesSearch;
+  });
+
+  const handleBan = async (serviceId: string) => {
+    try {
+      await blockJob(serviceId);
+      // Reload lại data sau khi ban
+      await loadJobs();
+      setConfirmAction(null);
+      toast.success('Đã cấm dịch vụ');
+    } catch (error: any) {
+      toast.error(error.message || 'Không thể cấm dịch vụ');
+    }
+  };
+
+  const handleUnban = async (serviceId: string) => {
+    try {
+      await unblockJob(serviceId);
+      // Reload lại data sau khi unban
+      await loadJobs();
+      setConfirmAction(null);
+      toast.success('Đã bỏ cấm dịch vụ');
+    } catch (error: any) {
+      toast.error(error.message || 'Không thể bỏ cấm dịch vụ');
+    }
   };
 
   const confirmBanUnban = () => {
@@ -160,12 +97,14 @@ export function ServicesManagement() {
     }
   };
 
-  const getStatusBadge = (status: ServiceStatus) => {
-    const variants: Record<ServiceStatus, { label: string; variant: 'default' | 'secondary' | 'destructive' }> = {
-      open: { label: 'Đang mở', variant: 'default' },
+  const getStatusBadge = (status: JobStatus) => {
+    const variants: Record<JobStatus, { label: string; variant: 'default' | 'secondary' | 'destructive' }> = {
       pending: { label: 'Chờ duyệt', variant: 'secondary' },
-      closed: { label: 'Đã đóng', variant: 'destructive' },
-      banned: { label: 'Đã cấm', variant: 'destructive' },
+      open: { label: 'Đang mở', variant: 'default' },
+      matched: { label: 'Đã khớp', variant: 'secondary' },
+      completed: { label: 'Hoàn thành', variant: 'default' },
+      cancelled: { label: 'Đã hủy', variant: 'destructive' },
+      expired: { label: 'Hết hạn', variant: 'destructive' },
     };
     return <Badge variant={variants[status].variant} className="w-24 justify-center">{variants[status].label}</Badge>;
   };
@@ -195,10 +134,12 @@ export function ServicesManagement() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Tất cả</SelectItem>
-            <SelectItem value="open">Đang mở</SelectItem>
             <SelectItem value="pending">Chờ duyệt</SelectItem>
-            <SelectItem value="closed">Đã đóng</SelectItem>
-            <SelectItem value="banned">Đã cấm</SelectItem>
+            <SelectItem value="open">Đang mở</SelectItem>
+            <SelectItem value="matched">Đã khớp</SelectItem>
+            <SelectItem value="completed">Hoàn thành</SelectItem>
+            <SelectItem value="cancelled">Đã hủy</SelectItem>
+            <SelectItem value="expired">Hết hạn</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -230,14 +171,14 @@ export function ServicesManagement() {
                   <TableCell>{service.place}</TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-1 max-w-[150px]">
-                      {service.tags.slice(0, 2).map((tag) => (
-                        <Badge key={tag} variant="secondary" className="text-xs">
-                          {tag}
+                      {service.skills?.slice(0, 2).map((skill) => (
+                        <Badge key={skill.id} variant="secondary" className="text-xs">
+                          {skill.name}
                         </Badge>
                       ))}
-                      {service.tags.length > 2 && (
+                      {(service.skills?.length || 0) > 2 && (
                         <Badge variant="outline" className="text-xs">
-                          +{service.tags.length - 2}
+                          +{(service.skills?.length || 0) - 2}
                         </Badge>
                       )}
                     </div>
@@ -252,7 +193,7 @@ export function ServicesManagement() {
                       >
                         <Eye className="w-4 h-4" />
                       </Button>
-                      {service.status !== 'banned' ? (
+                      {service.status !== 'cancelled' && service.status !== 'expired' ? (
                         <Button
                           variant="destructive"
                           size="sm"
@@ -324,14 +265,14 @@ export function ServicesManagement() {
                   <p>{viewingService.preferred_start ? new Date(viewingService.preferred_start).toLocaleString('vi-VN') : 'N/A'}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground mb-1">Thời gian</p>
+                  <p className="text-sm text-muted-foreground mb-1">Thời gian ước tính</p>
                   <p>{viewingService.time} phút</p>
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <p className="text-sm text-muted-foreground mb-1">Slot</p>
-                  <p>{viewingService.slot} phút</p>
+                  <p className="text-sm text-muted-foreground mb-1">Time Slots</p>
+                  <p>{viewingService.slot}</p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">Hiển thị</p>
@@ -343,16 +284,16 @@ export function ServicesManagement() {
                 </div>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground mb-2">Tags</p>
+                <p className="text-sm text-muted-foreground mb-2">Skills</p>
                 <div className="flex flex-wrap gap-2">
-                  {viewingService.tags.length > 0 ? (
-                    viewingService.tags.map((tag) => (
-                      <Badge key={tag} variant="secondary">
-                        {tag}
+                  {viewingService.skills && viewingService.skills.length > 0 ? (
+                    viewingService.skills.map((skill) => (
+                      <Badge key={skill.id} variant="secondary">
+                        {skill.name}
                       </Badge>
                     ))
                   ) : (
-                    <p className="text-sm text-muted-foreground">Không có tags</p>
+                    <p className="text-sm text-muted-foreground">Không có skills</p>
                   )}
                 </div>
               </div>
@@ -374,7 +315,7 @@ export function ServicesManagement() {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={!!confirmAction} onOpenChange={(open) => !open && setConfirmAction(null)}>
+      <AlertDialog open={!!confirmAction} onOpenChange={(open: boolean) => !open && setConfirmAction(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Xác nhận hành động</AlertDialogTitle>
