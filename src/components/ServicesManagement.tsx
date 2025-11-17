@@ -10,7 +10,7 @@ import { Search, Eye, ShieldBan, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 
 type Visibility = 'public' | 'private';
-type ServiceStatus = 'open' | 'closed' | 'pending' | 'banned';
+type ServiceStatus = 'open' | 'pending' | 'matched' | 'completed' | 'cancelled' | 'expired' | 'banned';
 
 interface Service {
   id: string;
@@ -70,7 +70,7 @@ const mockServices: Service[] = [
     time: 90,
     slot: 45,
     visibility: 'public',
-    status: 'open',
+    status: 'matched',
     tags: ['Giáo dục'],
     created_at: '2025-01-20',
     updated_at: '2025-02-01',
@@ -106,6 +106,54 @@ const mockServices: Service[] = [
     tags: ['Việc nhà', 'Nội trợ', 'Chăm sóc'],
     created_at: '2025-02-05',
     updated_at: '2025-02-15',
+  },
+  {
+    id: 'srv_5',
+    user_id: 'usr_4',
+    title: 'Tư vấn marketing online',
+    description: 'Tư vấn chiến lược marketing, quảng cáo Facebook, Google',
+    region_code: 'HCM',
+    place: 'TP. Hồ Chí Minh',
+    preferred_start: '2025-11-01T10:00',
+    time: 120,
+    slot: 60,
+    visibility: 'public',
+    status: 'completed',
+    tags: ['Tư vấn', 'Công nghệ'],
+    created_at: '2025-01-10',
+    updated_at: '2025-01-25',
+  },
+  {
+    id: 'srv_6',
+    user_id: 'usr_2',
+    title: 'Chăm sóc người cao tuổi',
+    description: 'Chăm sóc, đi lại, ăn uống cho người cao tuổi',
+    region_code: 'HN',
+    place: 'Hà Nội',
+    preferred_start: '2025-09-15T08:00',
+    time: 480,
+    slot: 240,
+    visibility: 'public',
+    status: 'expired',
+    tags: ['Chăm sóc', 'Y tế'],
+    created_at: '2025-01-05',
+    updated_at: '2025-01-20',
+  },
+  {
+    id: 'srv_7',
+    user_id: 'usr_5',
+    title: 'Vận chuyển hàng hóa nội thành',
+    description: 'Dịch vụ vận chuyển hàng hóa, đồ đạc trong nội thành',
+    region_code: 'DN',
+    place: 'Đà Nẵng',
+    preferred_start: '2025-11-05T07:00',
+    time: 180,
+    slot: 60,
+    visibility: 'public',
+    status: 'cancelled',
+    tags: ['Vận chuyển'],
+    created_at: '2025-02-01',
+    updated_at: '2025-02-08',
   },
 ];
 
@@ -161,10 +209,13 @@ export function ServicesManagement() {
   };
 
   const getStatusBadge = (status: ServiceStatus) => {
-    const variants: Record<ServiceStatus, { label: string; variant: 'default' | 'secondary' | 'destructive' }> = {
+    const variants: Record<ServiceStatus, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
       open: { label: 'Đang mở', variant: 'default' },
       pending: { label: 'Chờ duyệt', variant: 'secondary' },
-      closed: { label: 'Đã đóng', variant: 'destructive' },
+      matched: { label: 'Đã ghép', variant: 'default' },
+      completed: { label: 'Hoàn thành', variant: 'outline' },
+      cancelled: { label: 'Đã hủy', variant: 'destructive' },
+      expired: { label: 'Hết hạn', variant: 'destructive' },
       banned: { label: 'Đã cấm', variant: 'destructive' },
     };
     return <Badge variant={variants[status].variant} className="w-24 justify-center">{variants[status].label}</Badge>;
@@ -197,7 +248,10 @@ export function ServicesManagement() {
             <SelectItem value="all">Tất cả</SelectItem>
             <SelectItem value="open">Đang mở</SelectItem>
             <SelectItem value="pending">Chờ duyệt</SelectItem>
-            <SelectItem value="closed">Đã đóng</SelectItem>
+            <SelectItem value="matched">Đã ghép</SelectItem>
+            <SelectItem value="completed">Hoàn thành</SelectItem>
+            <SelectItem value="cancelled">Đã hủy</SelectItem>
+            <SelectItem value="expired">Hết hạn</SelectItem>
             <SelectItem value="banned">Đã cấm</SelectItem>
           </SelectContent>
         </Select>

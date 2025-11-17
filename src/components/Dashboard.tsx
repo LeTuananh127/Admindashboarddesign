@@ -32,7 +32,7 @@ const mockServices = [
     title: 'Dạy kèm tiếng Anh',
     region_code: 'HCM',
     place: 'TP. Hồ Chí Minh',
-    status: 'open',
+    status: 'matched',
     tags: ['Giáo dục'],
     created_at: '2025-01-20',
     visibility: 'public',
@@ -59,6 +59,39 @@ const mockServices = [
     created_at: '2025-02-05',
     visibility: 'public',
   },
+  {
+    id: 'srv_5',
+    user_id: 'usr_4',
+    title: 'Tư vấn marketing online',
+    region_code: 'HCM',
+    place: 'TP. Hồ Chí Minh',
+    status: 'completed',
+    tags: ['Tư vấn', 'Công nghệ'],
+    created_at: '2025-01-10',
+    visibility: 'public',
+  },
+  {
+    id: 'srv_6',
+    user_id: 'usr_2',
+    title: 'Chăm sóc người cao tuổi',
+    region_code: 'HN',
+    place: 'Hà Nội',
+    status: 'expired',
+    tags: ['Chăm sóc', 'Y tế'],
+    created_at: '2025-01-05',
+    visibility: 'public',
+  },
+  {
+    id: 'srv_7',
+    user_id: 'usr_5',
+    title: 'Vận chuyển hàng hóa nội thành',
+    region_code: 'DN',
+    place: 'Đà Nẵng',
+    status: 'cancelled',
+    tags: ['Vận chuyển'],
+    created_at: '2025-02-01',
+    visibility: 'public',
+  },
 ];
 
 export function Dashboard() {
@@ -69,15 +102,23 @@ export function Dashboard() {
   
   const totalServices = mockServices.length;
   const openServices = mockServices.filter(s => s.status === 'open').length;
+  const matchedServices = mockServices.filter(s => s.status === 'matched').length;
+  const completedServices = mockServices.filter(s => s.status === 'completed').length;
   const pendingServices = mockServices.filter(s => s.status === 'pending').length;
+  const cancelledServices = mockServices.filter(s => s.status === 'cancelled').length;
+  const expiredServices = mockServices.filter(s => s.status === 'expired').length;
   const bannedServices = mockServices.filter(s => s.status === 'banned').length;
 
   // Thống kê theo trạng thái dịch vụ
   const serviceStatusData = [
     { name: 'Đang mở', value: openServices, color: '#10b981' },
+    { name: 'Đã ghép', value: matchedServices, color: '#3b82f6' },
+    { name: 'Hoàn thành', value: completedServices, color: '#8b5cf6' },
     { name: 'Chờ duyệt', value: pendingServices, color: '#f59e0b' },
-    { name: 'Đã cấm', value: bannedServices, color: '#ef4444' },
-  ];
+    { name: 'Đã hủy', value: cancelledServices, color: '#ef4444' },
+    { name: 'Hết hạn', value: expiredServices, color: '#6b7280' },
+    { name: 'Đã cấm', value: bannedServices, color: '#dc2626' },
+  ].filter(item => item.value > 0);
 
   // Thống kê theo tags
   const tagStats: Record<string, number> = {};
@@ -97,8 +138,8 @@ export function Dashboard() {
 
   // Thống kê theo tháng (giả lập)
   const monthlyData = [
-    { month: 'T1', users: 2, services: 2 },
-    { month: 'T2', users: 3, services: 2 },
+    { month: 'T1', users: 2, services: 3 },
+    { month: 'T2', users: 3, services: 4 },
   ];
 
   const stats = [
@@ -116,23 +157,23 @@ export function Dashboard() {
       icon: Settings, 
       color: 'text-green-600',
       bgColor: 'bg-green-50',
-      detail: `${openServices} đang mở, ${pendingServices} chờ duyệt`
+      detail: `${openServices} đang mở, ${matchedServices} đã ghép`
     },
     { 
-      label: 'Dịch vụ đang mở', 
-      value: openServices.toString(), 
+      label: 'Hoàn thành', 
+      value: completedServices.toString(), 
       icon: Activity, 
-      color: 'text-orange-600',
-      bgColor: 'bg-orange-50',
-      detail: `${((openServices / totalServices) * 100).toFixed(0)}% tổng dịch vụ`
+      color: 'text-purple-600',
+      bgColor: 'bg-purple-50',
+      detail: `${((completedServices / totalServices) * 100).toFixed(0)}% tổng dịch vụ`
     },
     { 
-      label: 'Dịch vụ bị cấm', 
-      value: bannedServices.toString(), 
+      label: 'Cần xử lý', 
+      value: (bannedServices + cancelledServices + expiredServices).toString(), 
       icon: ShieldBan, 
       color: 'text-red-600',
       bgColor: 'bg-red-50',
-      detail: `${bannedUsers} người dùng bị cấm`
+      detail: `${bannedServices} bị cấm, ${cancelledServices} đã hủy, ${expiredServices} hết hạn`
     },
   ];
 

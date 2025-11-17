@@ -63,12 +63,12 @@
     --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     --color-red-50: oklch(.971 .013 17.38);
     --color-red-600: oklch(.577 .245 27.325);
-    --color-orange-50: oklch(.98 .016 73.684);
-    --color-orange-600: oklch(.646 .222 41.116);
     --color-green-50: oklch(.982 .018 155.826);
     --color-green-600: oklch(.627 .194 149.214);
     --color-blue-50: oklch(.97 .014 254.604);
     --color-blue-600: oklch(.546 .245 262.881);
+    --color-purple-50: oklch(.977 .014 308.299);
+    --color-purple-600: oklch(.558 .288 302.321);
     --color-slate-50: oklch(.984 .003 247.858);
     --color-slate-100: oklch(.968 .007 247.896);
     --color-black: #000;
@@ -1029,10 +1029,6 @@
     }
   }
 
-  .bg-orange-50 {
-    background-color: var(--color-orange-50);
-  }
-
   .bg-popover {
     background-color: var(--popover);
   }
@@ -1049,6 +1045,10 @@
     .bg-primary\/10 {
       background-color: color-mix(in oklab, var(--primary) 10%, transparent);
     }
+  }
+
+  .bg-purple-50 {
+    background-color: var(--color-purple-50);
   }
 
   .bg-red-50 {
@@ -1239,10 +1239,6 @@
     color: var(--muted-foreground);
   }
 
-  .text-orange-600 {
-    color: var(--color-orange-600);
-  }
-
   .text-popover-foreground {
     color: var(--popover-foreground);
   }
@@ -1253,6 +1249,10 @@
 
   .text-primary-foreground {
     color: var(--primary-foreground);
+  }
+
+  .text-purple-600 {
+    color: var(--color-purple-600);
   }
 
   .text-red-600 {
