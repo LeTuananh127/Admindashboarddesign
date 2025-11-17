@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
@@ -6,27 +6,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Badge } from './ui/badge';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
-import { Search, Eye, ShieldBan, ShieldCheck } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { Search, Eye, ShieldBan, ShieldCheck, ChevronLeft, ChevronRight } from 'lucide-react';
+import { toast } from 'sonner';
+import { getAllJobs, type Job } from '../lib/jobs.api';
 
 type Visibility = 'public' | 'private';
 type ServiceStatus = 'open' | 'pending' | 'matched' | 'completed' | 'cancelled' | 'expired' | 'banned';
 
-interface Service {
-  id: string;
-  user_id: string;
-  title: string;
-  description: string;
-  region_code: string;
-  place: string;
-  preferred_start: string;
-  time: number;
-  slot: number;
-  visibility: Visibility;
-  status: ServiceStatus;
+interface Service extends Job {
   tags: string[];
-  created_at: string;
-  updated_at: string;
 }
 
 const availableTags = [
@@ -157,22 +145,73 @@ const mockServices: Service[] = [
   },
 ];
 
-export function ServicesManagement() {
-  const [services, setServices] = useState<Service[]>(mockServices);
+export function ServicesManagement({ dataRefreshTrigger = 0 }: { dataRefreshTrigger?: number }) {
+  const [services, setServices] = useState<Service[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [viewingService, setViewingService] = useState<Service | null>(null);
   const [confirmAction, setConfirmAction] = useState<{ serviceId: string; action: 'ban' | 'unban' } | null>(null);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(0);
+  const [pageSize] = useState(20); // 20 services per page
+  const [totalServices, setTotalServices] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
 
-  const filteredServices = services.filter((service) => {
-    const matchesSearch =
-      service.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      service.place.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      service.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      service.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
-    const matchesStatus = filterStatus === 'all' || service.status === filterStatus;
-    return matchesSearch && matchesStatus;
-  });
+  const loadServices = async (page = 0) => {
+    // Check if we have a token before making API call
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+      console.log('[ServicesManagement] No token found, skipping API call');
+      setLoading(false);
+      return;
+    }
+    
+    try {
+      const response = await getAllJobs({
+        page,
+        pageSize,
+        search: searchTerm || undefined,
+        type: filterStatus !== 'all' ? [filterStatus as any] : undefined,
+      });
+      const transformedServices = (response.data || []).map((job: Job) => ({
+        ...job,
+        tags: job.skills?.map(skill => skill.name) || []
+      }));
+      setServices(transformedServices);
+      setTotalServices(response.metadata.total);
+      setTotalPages(response.metadata.totalPages);
+      setCurrentPage(response.metadata.page);
+    } catch (error) {
+      console.error('Failed to load services:', error);
+      toast.error('Không thể tải danh sách dịch vụ');
+      setServices([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    console.log('[ServicesManagement] Component mounted or refreshed, calling loadServices');
+    loadServices();
+  }, []);
+
+  // Handle search and filter changes
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      loadServices(0); // Reset to first page when searching/filtering
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchTerm, filterStatus]);
+
+  // Handle data refresh trigger
+  useEffect(() => {
+    if (dataRefreshTrigger > 0) {
+      console.log('[ServicesManagement] Data refresh triggered');
+      loadServices(currentPage);
+    }
+  }, [dataRefreshTrigger]);
 
   const handleBan = (serviceId: string) => {
     setServices(
@@ -257,46 +296,51 @@ export function ServicesManagement() {
         </Select>
       </div>
 
-      <div className="border rounded-lg overflow-auto">
-        <Table>
+      {loading ? (
+        <div className="flex items-center justify-center py-8">
+          <div className="text-muted-foreground">Đang tải danh sách dịch vụ...</div>
+        </div>
+      ) : (
+        <div className="border rounded-lg overflow-auto">
+          <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>ID</TableHead>
-              <TableHead>Tiêu đề</TableHead>
-              <TableHead>Địa điểm</TableHead>
-              <TableHead>Tags</TableHead>
-              <TableHead>Trạng thái</TableHead>
-              <TableHead className="text-center">Thao tác</TableHead>
+              <TableHead className="w-20 px-2">ID</TableHead>
+              <TableHead className="w-30">Tiêu đề</TableHead>
+              <TableHead className="w-32">Địa điểm</TableHead>
+              <TableHead className="w-32">Tags</TableHead>
+              <TableHead className="w-24 text-center">Trạng thái</TableHead>
+              <TableHead className="text-center w-32">Thao tác</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredServices.length === 0 ? (
+            {services.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="text-center text-muted-foreground">
                   Không tìm thấy dịch vụ nào
                 </TableCell>
               </TableRow>
             ) : (
-              filteredServices.map((service) => (
+              services.map((service) => (
                 <TableRow key={service.id}>
-                  <TableCell>{service.id}</TableCell>
-                  <TableCell className="max-w-[200px] truncate">{service.title}</TableCell>
+                  <TableCell className="px-2">{service.id}</TableCell>
+                  <TableCell className="max-w-40 truncate">{service.title}</TableCell>
                   <TableCell>{service.place}</TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-1 max-w-[150px]">
-                      {service.tags.slice(0, 2).map((tag) => (
+                      {service.tags?.slice(0, 2).map((tag) => (
                         <Badge key={tag} variant="secondary" className="text-xs">
                           {tag}
                         </Badge>
                       ))}
-                      {service.tags.length > 2 && (
+                      {service.tags?.length > 2 && (
                         <Badge variant="outline" className="text-xs">
                           +{service.tags.length - 2}
                         </Badge>
                       )}
                     </div>
                   </TableCell>
-                  <TableCell>{getStatusBadge(service.status)}</TableCell>
+                  <TableCell className="text-center">{getStatusBadge(service.status)}</TableCell>
                   <TableCell className="text-center">
                     <div className="flex justify-center gap-2">
                       <Button
@@ -335,6 +379,39 @@ export function ServicesManagement() {
           </TableBody>
         </Table>
       </div>
+      )}
+
+      {/* Pagination */}
+      {!loading && totalPages > 1 && (
+        <div className="flex items-center justify-between mt-4">
+          <div className="text-sm text-muted-foreground">
+            Hiển thị {services.length} trong tổng số {totalServices} dịch vụ
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => loadServices(currentPage - 1)}
+              disabled={currentPage === 0}
+            >
+              <ChevronLeft className="w-4 h-4 mr-1" />
+              Trước
+            </Button>
+            <span className="text-sm">
+              Trang {currentPage + 1} / {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => loadServices(currentPage + 1)}
+              disabled={currentPage >= totalPages - 1}
+            >
+              Sau
+              <ChevronRight className="w-4 h-4 ml-1" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* View Service Dialog */}
       <Dialog open={!!viewingService} onOpenChange={() => setViewingService(null)}>
@@ -428,7 +505,7 @@ export function ServicesManagement() {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={!!confirmAction} onOpenChange={(open) => !open && setConfirmAction(null)}>
+      <AlertDialog open={!!confirmAction} onOpenChange={(open: boolean) => !open && setConfirmAction(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Xác nhận hành động</AlertDialogTitle>

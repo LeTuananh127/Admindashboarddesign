@@ -3,8 +3,9 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { Lock, User } from 'lucide-react';
+import { loginAdmin } from '../lib/auth.api';
 
 interface LoginPageProps {
   onLogin: () => void;
@@ -15,21 +16,23 @@ export function LoginPage({ onLogin }: LoginPageProps) {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
-    // Simulate login process
-    setTimeout(() => {
-      // Simple validation (in real app, this would be API call)
-      if (username === 'admin' && password === 'admin123') {
-        toast.success('Đăng nhập thành công!');
-        onLogin();
-      } else {
-        toast.error('Tên đăng nhập hoặc mật khẩu không đúng!');
-      }
+    try {
+      await loginAdmin({
+        fullname: username,
+        password: password,
+      });
+      toast.success('Đăng nhập thành công!');
+      onLogin();
+    } catch (error) {
+      console.error('Login failed:', error);
+      toast.error('Tên đăng nhập hoặc mật khẩu không đúng!');
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   return (

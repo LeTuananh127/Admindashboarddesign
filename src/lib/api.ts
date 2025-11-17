@@ -97,7 +97,11 @@ async function apiFetch<T>(
       // TEMP DEBUG: log which base URL and Authorization header are being used
       try {
         // eslint-disable-next-line no-console
-        console.log(`[apiFetch] request -> ${base}${endpoint}`, { Authorization: headers['Authorization'] });
+        console.log(`[apiFetch] request -> ${base}${endpoint}`, {
+          hasToken: !!token,
+          tokenPrefix: token ? token.substring(0, 20) + '...' : 'no token',
+          authHeader: headers['Authorization'] ? 'present' : 'missing'
+        });
       } catch (_) {}
       const response = await fetch(`${base}${endpoint}`, config);
 

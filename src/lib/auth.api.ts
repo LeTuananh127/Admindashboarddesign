@@ -39,10 +39,25 @@ export async function loginAdmin(
 
     // Lưu tokens
     if (response.access_token) {
+      console.log('[loginAdmin] About to save token:', {
+        tokenLength: response.access_token.length,
+        tokenStart: response.access_token.substring(0, 50)
+      });
       setAuthToken(response.access_token);
       localStorage.setItem('refresh_token', response.refresh_token);
       localStorage.setItem('adminLoggedIn', 'true');
       localStorage.setItem('user', JSON.stringify(response.user));
+      
+      // DEBUG: verify token was saved
+      const savedToken = localStorage.getItem('access_token');
+      console.log('[loginAdmin] Token saved verification:', {
+        hasToken: !!savedToken,
+        tokenLength: savedToken?.length,
+        savedTokenStart: savedToken?.substring(0, 50)
+      });
+      
+      // Small delay to ensure localStorage is committed
+      await new Promise(resolve => setTimeout(resolve, 50));
     }
 
     return response;

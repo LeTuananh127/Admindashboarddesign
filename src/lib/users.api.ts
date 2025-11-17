@@ -26,10 +26,45 @@ export interface UserWithDetail extends User {
   userDetail?: UserDetail;
 }
 
+export interface PaginationParams {
+  page?: number;
+  pageSize?: number;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+  search?: string;
+  status?: 'active' | 'suspended' | 'banned';
+}
+
+export interface PaginatedResponse<T> {
+  data: T[];
+  metadata: {
+    total: number;
+    page: number;
+    pageSize: number;
+    totalPages: number;
+  };
+}
+
+// Build query string từ pagination params
+function buildQueryString(params: PaginationParams): string {
+  const searchParams = new URLSearchParams();
+  
+  if (params.page !== undefined) searchParams.append('page', params.page.toString());
+  if (params.pageSize !== undefined) searchParams.append('pageSize', params.pageSize.toString());
+  if (params.sortBy) searchParams.append('sortBy', params.sortBy);
+  if (params.sortOrder) searchParams.append('sortOrder', params.sortOrder);
+  if (params.search) searchParams.append('search', params.search);
+  if (params.status) searchParams.append('status', params.status);
+  
+  const queryString = searchParams.toString();
+  return queryString ? `?${queryString}` : '';
+}
+
 // Lấy danh sách tất cả users (Admin only)
-export async function getAllUsers(): Promise<User[]> {
+export async function getAllUsers(params: PaginationParams = {}): Promise<PaginatedResponse<User>> {
   try {
-    return await apiGet<User[]>('/api/v1/users');
+    const queryString = buildQueryString(params);
+    return await apiGet<PaginatedResponse<User>>(`/api/v1/users${queryString}`);
   } catch (error) {
     console.error('Failed to fetch users:', error);
     throw error;
