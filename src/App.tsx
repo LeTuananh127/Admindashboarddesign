@@ -4,7 +4,7 @@ import { UsersManagement } from './components/UsersManagement';
 import { ServicesManagement } from './components/ServicesManagement';
 import { Dashboard } from './components/Dashboard';
 import { LoginPage } from './components/LoginPage';
-import { toast } from 'sonner';
+import { toast } from 'sonner@2.0.3';
 
 type Page = 'dashboard' | 'users' | 'services';
 

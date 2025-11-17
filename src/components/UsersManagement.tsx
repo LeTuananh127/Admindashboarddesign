@@ -1,83 +1,65 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Badge } from './ui/badge';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
 import { Search, ShieldBan, ShieldCheck } from 'lucide-react';
-import { toast } from 'sonner';
-import { getAllUsers, blockUser, unblockUser, User } from '../lib/users.api';
+import { toast } from 'sonner@2.0.3';
+
+interface User {
+  user_id: string;
+  user_name: string;
+  phone: string;
+  status: 'active' | 'banned';
+  created_at: string;
+}
+
+const mockUsers: User[] = [
+  { user_id: 'usr_1', user_name: 'Nguyễn Văn A', phone: '0901234567', status: 'active', created_at: '2025-01-15' },
+  { user_id: 'usr_2', user_name: 'Trần Thị B', phone: '0912345678', status: 'active', created_at: '2025-01-20' },
+  { user_id: 'usr_3', user_name: 'Lê Văn C', phone: '0923456789', status: 'banned', created_at: '2025-02-01' },
+  { user_id: 'usr_4', user_name: 'Phạm Thị D', phone: '0934567890', status: 'active', created_at: '2025-02-10' },
+  { user_id: 'usr_5', user_name: 'Hoàng Văn E', phone: '0945678901', status: 'active', created_at: '2025-02-15' },
+];
 
 // Hàm ẩn số điện thoại, chỉ hiển thị 3 số cuối
-const maskPhone = (phone: string | null) => {
-  if (!phone || phone.length < 3) return '***';
+const maskPhone = (phone: string) => {
+  if (!phone || phone.length < 3) return phone;
   const lastThree = phone.slice(-3);
   return `***${lastThree}`;
 };
 
 export function UsersManagement() {
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<User[]>(mockUsers);
   const [searchTerm, setSearchTerm] = useState('');
   const [confirmAction, setConfirmAction] = useState<{ userId: string; action: 'ban' | 'unban' } | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
-  // Load users khi component mount
-  useEffect(() => {
-    console.log('🔍 UsersManagement mounted');
-    console.log('  Access Token:', localStorage.getItem('access_token'));
-    console.log('  Admin Logged In:', localStorage.getItem('adminLoggedIn'));
-    loadUsers();
-  }, []);
-
-  const loadUsers = async () => {
-    try {
-      console.log('📡 Loading users...');
-      setIsLoading(true);
-      const data = await getAllUsers();
-      console.log('✅ Users loaded:', data.length);
-      setUsers(data);
-    } catch (error: any) {
-      console.error('❌ Load users failed:', error);
-      toast.error(error.message || 'Không thể tải danh sách người dùng');
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const filteredUsers = users.filter(
     (user) =>
-      user.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.phone?.includes(searchTerm) ||
-      user.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.email?.toLowerCase().includes(searchTerm.toLowerCase())
+      user.user_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.phone.includes(searchTerm) ||
+      user.user_id.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleBan = async (userId: string) => {
-    try {
-      await blockUser(userId);
-      // Cập nhật UI
-      setUsers(
-        users.map((user) =>
-          user.id === userId ? { ...user, status: 'banned' as const } : user
-        )
-      );
-      setConfirmAction(null);
-      toast.success('Đã cấm người dùng');
-    } catch (error: any) {
-      toast.error(error.message || 'Không thể cấm người dùng');
-    }
+  const handleBan = (userId: string) => {
+    setUsers(
+      users.map((user) =>
+        user.user_id === userId ? { ...user, status: 'banned' as const } : user
+      )
+    );
+    setConfirmAction(null);
+    toast.success('Đã cấm người dùng');
   };
 
-  const handleUnban = async (userId: string) => {
-    try {
-      await unblockUser(userId);
-      // Reload lại data sau khi unban
-      await loadUsers();
-      setConfirmAction(null);
-      toast.success('Đã bỏ cấm người dùng');
-    } catch (error: any) {
-      toast.error(error.message || 'Không thể bỏ cấm người dùng');
-    }
+  const handleUnban = (userId: string) => {
+    setUsers(
+      users.map((user) =>
+        user.user_id === userId ? { ...user, status: 'active' as const } : user
+      )
+    );
+    setConfirmAction(null);
+    toast.success('Đã bỏ cấm người dùng');
   };
 
   const confirmBanUnban = () => {
@@ -90,12 +72,9 @@ export function UsersManagement() {
     }
   };
 
-  const getStatusBadge = (status: 'active' | 'suspended' | 'banned') => {
+  const getStatusBadge = (status: 'active' | 'banned') => {
     if (status === 'banned') {
       return <Badge variant="destructive" className="w-24 justify-center">Đã cấm</Badge>;
-    }
-    if (status === 'suspended') {
-      return <Badge variant="secondary" className="w-24 justify-center">Tạm dừng</Badge>;
     }
     return <Badge variant="default" className="w-24 justify-center">Hoạt động</Badge>;
   };
@@ -122,75 +101,65 @@ export function UsersManagement() {
       </div>
 
       <div className="border rounded-lg">
-        {isLoading ? (
-          <div className="p-8 text-center text-muted-foreground">
-            Đang tải dữ liệu...
-          </div>
-        ) : (
-          <Table>
-            <TableHeader>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>ID</TableHead>
+              <TableHead>Tên người dùng</TableHead>
+              <TableHead>Số điện thoại</TableHead>
+              <TableHead>Trạng thái</TableHead>
+              <TableHead>Ngày tạo</TableHead>
+              <TableHead className="text-center">Thao tác</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filteredUsers.length === 0 ? (
               <TableRow>
-                <TableHead>ID</TableHead>
-                <TableHead>Tên người dùng</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Số điện thoại</TableHead>
-                <TableHead>Trạng thái</TableHead>
-                <TableHead>Ngày tạo</TableHead>
-                <TableHead className="text-center">Thao tác</TableHead>
+                <TableCell colSpan={6} className="text-center text-muted-foreground">
+                  Không tìm thấy người dùng nào
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredUsers.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground">
-                    Không tìm thấy người dùng nào
+            ) : (
+              filteredUsers.map((user) => (
+                <TableRow key={user.user_id}>
+                  <TableCell>{user.user_id}</TableCell>
+                  <TableCell>{user.user_name}</TableCell>
+                  <TableCell>{maskPhone(user.phone)}</TableCell>
+                  <TableCell>{getStatusBadge(user.status)}</TableCell>
+                  <TableCell>{user.created_at}</TableCell>
+                  <TableCell className="text-center">
+                    <div className="flex justify-center gap-2">
+                      {user.status === 'active' ? (
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => setConfirmAction({ userId: user.user_id, action: 'ban' })}
+                          className="w-28"
+                        >
+                          <ShieldBan className="w-4 h-4 mr-2" />
+                          Cấm
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setConfirmAction({ userId: user.user_id, action: 'unban' })}
+                          className="w-28"
+                        >
+                          <ShieldCheck className="w-4 h-4 mr-2" />
+                          Bỏ cấm
+                        </Button>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
-              ) : (
-                filteredUsers.map((user) => (
-                  <TableRow key={user.id}>
-                    <TableCell className="font-mono text-xs">{user.id.slice(0, 8)}...</TableCell>
-                    <TableCell>{user.full_name}</TableCell>
-                    <TableCell>{user.email || 'Chưa có'}</TableCell>
-                    <TableCell>{maskPhone(user.phone)}</TableCell>
-                    <TableCell>{getStatusBadge(user.status)}</TableCell>
-                    <TableCell>{new Date(user.created_at).toLocaleDateString('vi-VN')}</TableCell>
-                    <TableCell className="text-center">
-                      <div className="flex justify-center gap-2">
-                        {user.status === 'active' ? (
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => setConfirmAction({ userId: user.id, action: 'ban' })}
-                            className="w-28"
-                          >
-                            <ShieldBan className="w-4 h-4 mr-2" />
-                            Cấm
-                          </Button>
-                        ) : user.status === 'banned' ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setConfirmAction({ userId: user.id, action: 'unban' })}
-                            className="w-28"
-                          >
-                            <ShieldCheck className="w-4 h-4 mr-2" />
-                            Bỏ cấm
-                          </Button>
-                        ) : (
-                          <Badge variant="secondary">Tạm dừng</Badge>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        )}
+              ))
+            )}
+          </TableBody>
+        </Table>
       </div>
 
-      <AlertDialog open={!!confirmAction} onOpenChange={(open: boolean) => !open && setConfirmAction(null)}>
+      <AlertDialog open={!!confirmAction} onOpenChange={(open) => !open && setConfirmAction(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Xác nhận hành động</AlertDialogTitle>
