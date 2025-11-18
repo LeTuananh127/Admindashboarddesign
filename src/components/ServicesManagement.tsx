@@ -8,7 +8,8 @@ import { Badge } from './ui/badge';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
 import { Search, Eye, ShieldBan, ShieldCheck, ChevronLeft, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
-import { getAllJobs, type Job } from '../lib/jobs.api';
+import { getAllJobs, blockJob, unblockJob, type Job } from '../lib/jobs.api';
+import { getAuthToken } from '../lib/api';
 
 type Visibility = 'public' | 'private';
 type ServiceStatus = 'open' | 'pending' | 'matched' | 'completed' | 'cancelled' | 'expired' | 'banned';
@@ -128,31 +129,64 @@ export function ServicesManagement({ dataRefreshTrigger = 0 }: { dataRefreshTrig
     }
   }, [dataRefreshTrigger]);
 
-  const handleBan = (serviceId: string) => {
-    setServices(
-      services.map((service) =>
-        service.id === serviceId
-          ? { ...service, status: 'banned' as const, updated_at: new Date().toISOString().split('T')[0] }
-          : service
-      )
-    );
-    setConfirmAction(null);
-    toast.success('Đã cấm dịch vụ');
+  const handleBan = async (serviceId: string) => {
+    try {
+      await blockJob(serviceId);
+      setServices(
+        services.map((service) =>
+          service.id === serviceId
+            ? { ...service, status: 'banned' as const, updated_at: new Date().toISOString().split('T')[0] }
+            : service
+        )
+      );
+      toast.success('Đã cấm dịch vụ');
+    } catch (error: any) {
+      console.error(`Failed to block job ${serviceId}:`, error);
+      if (error && error.statusCode === 401) {
+        toast.error('401 Unauthorized — token không hợp lệ hoặc không có quyền admin. Vui lòng đăng nhập lại.');
+      } else if (error && error.message) {
+        toast.error(`Không thể cấm dịch vụ: ${error.message}`);
+      } else {
+        toast.error('Không thể cấm dịch vụ');
+      }
+    } finally {
+      setConfirmAction(null);
+    }
   };
 
-  const handleUnban = (serviceId: string) => {
-    setServices(
-      services.map((service) =>
-        service.id === serviceId
-          ? { ...service, status: 'open' as const, updated_at: new Date().toISOString().split('T')[0] }
-          : service
-      )
-    );
-    setConfirmAction(null);
-    toast.success('Đã bỏ cấm dịch vụ');
+  const handleUnban = async (serviceId: string) => {
+    try {
+      await unblockJob(serviceId);
+      setServices(
+        services.map((service) =>
+          service.id === serviceId
+            ? { ...service, status: 'open' as const, updated_at: new Date().toISOString().split('T')[0] }
+            : service
+        )
+      );
+      toast.success('Đã bỏ cấm dịch vụ');
+    } catch (error: any) {
+      console.error(`Failed to unblock job ${serviceId}:`, error);
+      if (error && error.statusCode === 401) {
+        toast.error('401 Unauthorized — token không hợp lệ hoặc không có quyền admin. Vui lòng đăng nhập lại.');
+      } else if (error && error.message) {
+        toast.error(`Không thể bỏ cấm dịch vụ: ${error.message}`);
+      } else {
+        toast.error('Không thể bỏ cấm dịch vụ');
+      }
+    } finally {
+      setConfirmAction(null);
+    }
   };
 
   const confirmBanUnban = () => {
+    const token = getAuthToken();
+    if (!token) {
+      toast.error('Bạn chưa đăng nhập — vui lòng đăng nhập tài khoản admin trước khi thực hiện hành động.');
+      setConfirmAction(null);
+      return;
+    }
+
     if (confirmAction) {
       if (confirmAction.action === 'ban') {
         handleBan(confirmAction.serviceId);

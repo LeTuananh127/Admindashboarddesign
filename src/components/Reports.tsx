@@ -128,6 +128,44 @@ export function Reports() {
     }
   };
 
+  const maskLast = (val: any, last = 3) => {
+    if (!val) return '—';
+    const s = String(val);
+    const visible = s.slice(-last);
+    const masked = s.length > last ? '*'.repeat(s.length - last) : '*'.repeat(s.length);
+    return masked + visible;
+  };
+
+  const lowerOrDash = (v: any) => {
+    if (v === undefined || v === null || v === '') return '—';
+    return String(v).toLowerCase();
+  };
+
+  const renderStatusBadge = (s: string | undefined | null) => {
+    const key = (s || '').toLowerCase();
+    // Map known statuses to label + Badge variant (match ServicesManagement getStatusBadge)
+    const map: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
+      // report statuses
+      pending: { label: 'Chờ xử lý', variant: 'secondary' },
+      reviewing: { label: 'Đang xem xét', variant: 'secondary' },
+      resolved: { label: 'Đã xử lý', variant: 'outline' },
+      rejected: { label: 'Bị từ chối', variant: 'destructive' },
+      // user statuses
+      active: { label: 'Hoạt động', variant: 'default' },
+      banned: { label: 'Đã cấm', variant: 'destructive' },
+      // service-like statuses (for consistency)
+      open: { label: 'Đang mở', variant: 'default' },
+      matched: { label: 'Đã ghép', variant: 'default' },
+      completed: { label: 'Hoàn thành', variant: 'outline' },
+      cancelled: { label: 'Đã hủy', variant: 'destructive' },
+      expired: { label: 'Hết hạn', variant: 'destructive' },
+    };
+    const entry = map[key];
+    if (entry) return <Badge variant={entry.variant} className="w-28 justify-center">{entry.label}</Badge>;
+    // fallback: show raw status capitalized inside a neutral badge
+    return <Badge variant="outline" className="w-24 justify-center">{s ? String(s).toString() : '—'}</Badge>;
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div>
@@ -186,7 +224,7 @@ export function Reports() {
                 <TableHead className="w-48">Đối tượng</TableHead>
                 <TableHead>Người báo</TableHead>
                 <TableHead>Lý do</TableHead>
-                <TableHead className="w-28">Trạng thái</TableHead>
+                <TableHead className="w-36 text-center">Trạng thái</TableHead>
                 <TableHead className="w-36 text-center">Thao tác</TableHead>
               </TableRow>
             </TableHeader>
@@ -198,16 +236,15 @@ export function Reports() {
               ) : (
                 reports.map(r => (
                   <TableRow key={r.id}>
-                    <TableCell className="px-2">{(r.id || '').toUpperCase()}</TableCell>
-                    <TableCell className="px-2">{(r.target_id || '').toUpperCase()}</TableCell>
+                    <TableCell className="px-2">{lowerOrDash(r.id)}</TableCell>
+                    <TableCell className="px-2">{lowerOrDash(r.target_id)}</TableCell>
                     <TableCell>{((r as any).targetDetails?.title ?? (r as any).targetDetails?.full_name) ?? r.target_type}</TableCell>
                     <TableCell>{r.reporter?.full_name || (r.reporter?.id || '').toUpperCase()}</TableCell>
                     <TableCell className="max-w-[300px] truncate">{r.reason}</TableCell>
-                    <TableCell>{r.status}</TableCell>
+                    <TableCell className="text-center">{renderStatusBadge(r.status)}</TableCell>
                     <TableCell className="text-center">
                       <div className="flex justify-center gap-2">
-                        <Button variant="ghost" size="sm" onClick={() => openReport(r.id)}>Xem</Button>
-                        <Button variant="destructive" size="sm" onClick={() => markResolved(r.id)}>Đã xử lý</Button>
+                        <Button variant="outline" size="sm" onClick={() => openReport(r.id)}>Xem</Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -237,42 +274,44 @@ export function Reports() {
           </DialogHeader>
               {viewing && (
             <div className="space-y-4">
-              <div><strong>ID:</strong> {(viewing.id || '').toUpperCase()}</div>
+              <div><strong>ID:</strong> {lowerOrDash(viewing.id)}</div>
               <div className="grid grid-cols-2 gap-3 items-start">
                 <div>
-                  <p className="text-sm text-muted-foreground mb-1">Loại</p>
-                  <p className="font-semibold capitalize">{viewing.target_type}</p>
+                  <p className="text-sm text-muted-foreground mb-1 font-semibold">Loại</p>
+                  <p className="capitalize">{viewing.target_type}</p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground mb-1 font-semibold">ID Đối tượng</p>
-                  <p className="font-mono">{(viewing.target_id || '').toUpperCase()}</p>
+                  <p className="font-mono">{lowerOrDash(viewing.target_id)}</p>
                 </div>
               </div>
               <div className="flex justify-end mt-2">
                 <Button variant="ghost" size="sm" onClick={() => fetchTargetDetails(viewing.target_type, viewing.target_id)}>Xem chi tiết đối tượng</Button>
               </div>
 
-              {/* Hiển thị thông tin chi tiết của đối tượng (user hoặc service) nếu backend trả về */}
-              {viewing.targetDetails && (
-                (() => {
-                  const td = viewing.targetDetails as any;
-                  const name = td.title ?? td.full_name ?? td.name ?? '—';
-                  const status = td.status ?? '';
-                  return (
-                    <div>
-                      <strong>Chi tiết đối tượng:</strong> {name}
-                      {status && (
-                        <span className="ml-2 text-sm text-muted-foreground">— Trạng thái: <span className="capitalize">{status}</span></span>
-                      )}
-                    </div>
-                  );
-                })()
-              )}
+              {/* Hiển thị thông tin chi tiết của đối tượng (chỉ hiển thị tóm tắt tại đây).
+                  Chi tiết đầy đủ sẽ mở trong dialog "Chi tiết đối tượng" khi người dùng nhấn "Xem chi tiết đối tượng". */}
+              {viewing.targetDetails && (() => {
+                const td = viewing.targetDetails as any;
+                const name = td.title ?? td.full_name ?? td.name ?? '—';
+                const status = td.status ?? '';
+                return (
+                  <div>
+                    <strong className="text-base">Chi tiết đối tượng:</strong> <span className="text-lg">{name}</span>
+                    {status && (
+                      <span className="ml-2 text-sm text-muted-foreground">— Trạng thái: <span className="capitalize">{status}</span></span>
+                    )}
+                  </div>
+                );
+              })()}
               <div><strong>Người báo:</strong> {viewing.reporter?.full_name}</div>
               <div><strong>Lý do:</strong> {viewing.reason}</div>
               <div><strong>Mô tả:</strong> {viewing.description || 'Không có'}</div>
               <div><strong>Thời gian tạo:</strong> {viewing.created_at ? new Date(viewing.created_at).toLocaleString() : 'Không có'}</div>
-              <div><strong>Trạng thái:</strong> {viewing.status}</div>
+              <div>
+                <strong>Trạng thái:</strong>
+                <span className="ml-2">{renderStatusBadge(viewing.status)}</span>
+              </div>
 
               {/* Hiển thị ảnh đính kèm nếu có */}
               {(() => {
@@ -337,14 +376,18 @@ export function Reports() {
 
               return (
                 <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
+                  <div className="mb-2">
+                    <div className="text-xl font-semibold">{title}</div>
+                    <div className="text-xs font-mono text-muted-foreground">{lowerOrDash(t.id ?? t.job_id)}</div>
+                  </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <p className="text-sm text-muted-foreground mb-1">ID</p>
-                      <p>{t.id}</p>
+                      <p>{lowerOrDash(t.id)}</p>
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground mb-1">User ID</p>
-                      <p>{t.user_id ?? t.userId ?? '—'}</p>
+                      <p>{lowerOrDash(t.user_id ?? t.userId)}</p>
                     </div>
                   </div>
                   <div>
@@ -414,8 +457,78 @@ export function Reports() {
                 </div>
               );
             }
+            if (tType === 'user') {
+              const avatar = t.avatar_url || t.user?.avatar_url || t.avatar || '';
+              const fullName = t.full_name || t.name || t.title || '—';
+              return (
+                <div className="flex flex-col gap-6 items-start max-h-[70vh] overflow-auto text-lg py-2">
+                  <div className="w-full md:w-36 flex flex-col items-center md:items-start">
+                    <img src={avatar} alt={fullName} className="w-24 h-24 object-cover rounded-full border" />
+                    <div className="mt-3 text-center md:text-left">
+                      <div className="text-2xl font-semibold">{fullName}</div>
+                      <div className="mt-1 text-xs font-mono text-muted-foreground"><span className="font-medium">ID đối tượng: </span>{lowerOrDash(t.id || t.user_id)}</div>
+                    </div>
+                  </div>
 
-            // default: render as simple key/value list for user or other types
+                  <div className="flex-1">
+                    {t.status ? (
+                      <div className="text-sm text-muted-foreground mb-3">
+                        <div className="font-medium">Trạng thái:</div>
+                        <div className="mt-1">{renderStatusBadge(t.status)}</div>
+                      </div>
+                    ) : null}
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="flex flex-col">
+                        <div className="text-sm text-muted-foreground">Số điện thoại</div>
+                        <div className="text-base">{maskLast(t.phone, 3)}</div>
+                      </div>
+
+                      <div className="flex flex-col">
+                        <div className="text-sm text-muted-foreground">Email</div>
+                        <div className="text-base">{t.email || '—'}</div>
+                      </div>
+
+                      <div className="flex flex-col">
+                        <div className="text-sm text-muted-foreground">CMND / CCCD</div>
+                        <div className="text-base">{maskLast(t.citizen_id, 3)}</div>
+                      </div>
+
+                      <div className="flex flex-col">
+                        <div className="text-sm text-muted-foreground">Ngày sinh</div>
+                        <div className="text-base">{t.userDetail?.birth_date ? new Date(t.userDetail.birth_date).toLocaleDateString() : '—'}</div>
+                      </div>
+
+                      <div className="col-span-2">
+                        <div className="text-sm text-muted-foreground">Khu vực</div>
+                        <div className="text-base">{t.region?.name || t.region || '—'}</div>
+                      </div>
+
+                      <div className="col-span-2">
+                        <div className="text-sm text-muted-foreground">Created at</div>
+                        <div className="text-base">{t.created_at ? new Date(t.created_at).toLocaleString() : '—'}</div>
+                      </div>
+
+                      <div className="col-span-2">
+                        <div className="text-sm text-muted-foreground">Updated at</div>
+                        <div className="text-base">{t.updated_at ? new Date(t.updated_at).toLocaleString() : '—'}</div>
+                      </div>
+                    </div>
+
+                    {t.qr_code && (
+                      <div className="mt-4">
+                        <p className="text-sm text-muted-foreground mb-2">QR code</p>
+                        <button onClick={() => setLightboxUrl(t.qr_code)} className="p-0 bg-transparent border-0 cursor-pointer">
+                          <img src={t.qr_code} alt="qr" className="block border rounded-md w-28 h-28 object-contain" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            }
+
+            // default: render as simple key/value list for other types
             return (
               <div className="space-y-2 max-h-[60vh] overflow-auto">
                 {Object.entries(t).map(([k, v]) => (

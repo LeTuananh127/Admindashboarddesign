@@ -187,3 +187,38 @@
 html {
   font-size: var(--font-size);
 }
+
+/* Custom scrollbar for dialogs and other scrollable areas */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0,0,0,0.25) transparent;
+}
+.custom-scrollbar::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(0,0,0,0.18);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(0,0,0,0.28);
+}
+
+/* Remove global border-radius for dialogs specifically — content uses rounded-none now */
+
+/* Force small fixed QR image size when layout forces scaling elsewhere */
+.qr-pixel img {
+  image-rendering: pixelated;
+  width: auto !important;
+  height: auto !important;
+  max-width: 96px !important;
+  max-height: 96px !important;
+  object-fit: none !important;
+  display: block;
+}
