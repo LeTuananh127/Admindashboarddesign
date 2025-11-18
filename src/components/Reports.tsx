@@ -6,7 +6,8 @@ import { Input } from './ui/input';
 import { Badge } from './ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { getReports, getReportById, updateReportStatus, type Report } from '../lib/reports.api';
-import { getJobDetail } from '../lib/jobs.api';
+import { getJobDetail, getServiceImages } from '../lib/jobs.api';
+import { apiGet } from '../lib/api';
 import { getUserDetail } from '../lib/users.api';
 import { toast } from 'sonner';
 import { Search } from 'lucide-react';
@@ -21,6 +22,11 @@ export function Reports() {
   const [viewing, setViewing] = useState<any | null>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [viewingTarget, setViewingTarget] = useState<any | null>(null);
+  const [serviceImageUrls, setServiceImageUrls] = useState<string[]>([]);
+  const [warningOpen, setWarningOpen] = useState(false);
+  const [warningText, setWarningText] = useState('');
+  const [warningReport, setWarningReport] = useState<any | null>(null);
+  const [warningSending, setWarningSending] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterTarget, setFilterTarget] = useState<string>('all');
@@ -93,6 +99,7 @@ export function Reports() {
       if (targetType === 'service') {
         const svc = await getJobDetail(targetId);
         setViewingTarget({ type: 'service', details: svc });
+        // images will be loaded by effect below
         return;
       }
 
@@ -114,6 +121,95 @@ export function Reports() {
       toast.error('Không thể tải chi tiết đối tượng');
     }
   };
+
+  // Whenever viewingTarget of type service changes, collect image URLs.
+  useEffect(() => {
+    let mounted = true;
+    const loadServiceImages = async () => {
+      setServiceImageUrls([]);
+      if (!viewingTarget || viewingTarget.type !== 'service') return;
+      const t = viewingTarget.details || {};
+      console.debug('[Reports] viewingTarget.details', t);
+
+      // First try the dedicated helper which may call multiple endpoints
+      try {
+        const svcId = t.id || t.job_id || t.jobId || viewingTarget.id || viewingTarget.details?.id;
+        if (svcId) {
+          console.debug('[Reports] calling getServiceImages for', svcId);
+          const fetched = await getServiceImages(String(svcId));
+          console.debug('[Reports] getServiceImages returned', fetched);
+          if (Array.isArray(fetched) && fetched.length > 0) {
+            if (mounted) {
+              setServiceImageUrls(fetched);
+              return;
+            }
+          }
+        }
+      } catch (err) {
+        console.debug('[Reports] getServiceImages failed', err);
+      }
+      const urls: string[] = [];
+
+      // helper to push if valid
+      const pushUrl = (u: any) => {
+        if (!u) return;
+        if (typeof u === 'string' && u.startsWith('http')) urls.push(u);
+      };
+
+      // Common possible fields
+      if (Array.isArray(t.image_urls)) {
+        t.image_urls.forEach(pushUrl);
+      }
+
+      if (Array.isArray(t.images)) {
+        t.images.forEach((it: any) => {
+          if (typeof it === 'string') pushUrl(it);
+          else if (it && it.url) pushUrl(it.url);
+          else if (it && it.image_url) pushUrl(it.image_url);
+          else if (it && it.id) urls.push(String(it.id));
+        });
+      }
+
+      if (Array.isArray(t.service_images)) {
+        t.service_images.forEach((it: any) => {
+          if (typeof it === 'string') pushUrl(it);
+          else if (it && it.url) pushUrl(it.url);
+          else if (it && it.image_url) pushUrl(it.image_url);
+          else if (it && it.image_id) urls.push(String(it.image_id));
+        });
+      }
+
+      if (Array.isArray(t.image_ids)) {
+        t.image_ids.forEach((id: any) => urls.push(String(id)));
+      }
+
+      // If we collected some raw ids (not full URLs), try to fetch their URLs from image endpoint
+      const ids = urls.filter(u => !u.startsWith('http'));
+      const finalUrls: string[] = urls.filter(u => u.startsWith('http'));
+      console.debug('[Reports] candidate urls/ids before resolving:', urls, 'ids:', ids);
+      for (const id of ids) {
+        try {
+          // try common image endpoint
+          const resp: any = await apiGet(`/api/v1/images/${id}`);
+          // resp might be { url } or { data: { url } } or string
+          if (!mounted) return;
+          if (!resp) continue;
+          if (typeof resp === 'string' && resp.startsWith('http')) finalUrls.push(resp);
+          else if (resp.url) finalUrls.push(resp.url);
+          else if (resp.data && resp.data.url) finalUrls.push(resp.data.url);
+          else if (resp.image_url) finalUrls.push(resp.image_url);
+        } catch (e) {
+          // ignore per-image errors
+          console.debug('[Reports] failed to fetch image id', id, e);
+        }
+      }
+
+      if (mounted) setServiceImageUrls(finalUrls);
+    };
+
+    loadServiceImages();
+    return () => { mounted = false; };
+  }, [viewingTarget]);
 
   // no explicit submit; search is debounced above
 
@@ -245,6 +341,13 @@ export function Reports() {
                     <TableCell className="text-center">
                       <div className="flex justify-center gap-2">
                         <Button variant="outline" size="sm" onClick={() => openReport(r.id)}>Xem</Button>
+                        <Button variant="destructive" size="sm" onClick={() => {
+                          // open warning dialog with prefilled text
+                          const pre = `Người dùng bị cảnh báo vì lý do: ${r.reason || '...'}\nĐề nghị người dùng không lặp lại hành động đó!`;
+                          setWarningText(pre);
+                          setWarningReport(r);
+                          setWarningOpen(true);
+                        }}>Cảnh báo</Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -376,10 +479,6 @@ export function Reports() {
 
               return (
                 <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
-                  <div className="mb-2">
-                    <div className="text-xl font-semibold">{title}</div>
-                    <div className="text-xs font-mono text-muted-foreground">{lowerOrDash(t.id ?? t.job_id)}</div>
-                  </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <p className="text-sm text-muted-foreground mb-1">ID</p>
@@ -454,6 +553,22 @@ export function Reports() {
                       <p>{t.updated_at ?? '—'}</p>
                     </div>
                   </div>
+                  {serviceImageUrls.length > 0 && (
+                    <div>
+                      <p className="text-sm text-muted-foreground mt-4 mb-2"><strong>Ảnh dịch vụ</strong></p>
+                      <div className="grid grid-cols-3 gap-2">
+                        {serviceImageUrls.map((u: string) => (
+                          <img
+                            key={u}
+                            src={u}
+                            alt="service"
+                            className="w-full h-28 object-cover rounded-md cursor-pointer hover:scale-105 transition-transform"
+                            onClick={() => setLightboxUrl(u)}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             }
@@ -542,6 +657,49 @@ export function Reports() {
           })()}
           <DialogFooter>
             <Button onClick={() => setViewingTarget(null)}>Đóng</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Warning dialog - send a text warning to the reported user's contact (UI only) */}
+      <Dialog open={warningOpen} onOpenChange={() => { if (!warningSending) setWarningOpen(false); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Gửi cảnh báo</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">Nội dung cảnh báo sẽ gửi tới người dùng được báo cáo. Bạn có thể chỉnh sửa trước khi gửi.</p>
+            <div>
+              <label className="text-sm font-medium mb-1 block" htmlFor="warningText">Nội dung cảnh báo</label>
+              <textarea
+                id="warningText"
+                placeholder="Người dùng bị cảnh báo vì lý do: ... (chỉnh sửa nếu cần)"
+                aria-label="Nội dung cảnh báo"
+                value={warningText}
+                onChange={(e) => setWarningText(e.target.value)}
+                className="w-full h-32 p-2 border rounded-md resize-y"
+              />
+            </div>
+            <div className="text-sm text-muted-foreground">Người nhận: <span className="font-mono">{warningReport?.target_id || warningReport?.reporter?.id || '—'}</span></div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => { if (!warningSending) { setWarningOpen(false); setWarningReport(null); } }}>Hủy</Button>
+            <Button disabled={warningSending} onClick={async () => {
+              try {
+                setWarningSending(true);
+                // TODO: call backend API to send warning if available. For now just log and show toast.
+                console.debug('[Reports] send warning', { report: warningReport, text: warningText });
+                await new Promise(res => setTimeout(res, 500));
+                toast.success('Đã gửi cảnh báo');
+                setWarningOpen(false);
+                setWarningReport(null);
+              } catch (e) {
+                console.error('Failed to send warning', e);
+                toast.error('Không gửi được cảnh báo');
+              } finally {
+                setWarningSending(false);
+              }
+            }}>Gửi cảnh báo</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -102,7 +102,7 @@ export function Dashboard({ dataRefreshTrigger = 0 }: { dataRefreshTrigger?: num
   // Thống kê theo khu vực
   const regionStats: Record<string, number> = {};
   services.forEach(service => {
-    regionStats[service.region_code] = (regionStats[service.region_code] || 0) + 1;
+    regionStats[service.place] = (regionStats[service.place] || 0) + 1;
   });
   const regionData = Object.entries(regionStats).map(([name, value]) => ({ name, value }));
 

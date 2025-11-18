@@ -7,6 +7,9 @@ const FALLBACK_API_BASE_URL = PRIMARY_API_BASE_URL.includes(':3001')
   : PRIMARY_API_BASE_URL.replace(':3000', ':3001');
 const API_BASE_URLS = Array.from(new Set([PRIMARY_API_BASE_URL, FALLBACK_API_BASE_URL]));
 
+// Keep timestamps of recent 401 warnings to suppress duplicates for the same endpoint/base
+const recent401s: Map<string, number> = new Map();
+
 interface ApiError {
   message: string;
   statusCode?: number;
@@ -92,16 +95,24 @@ async function apiFetch<T>(
 
   // Thử gọi lần lượt qua các base URL (primary -> fallback)
   let lastError: ApiError | null = null;
-  for (const base of API_BASE_URLS) {
+  for (let i = 0; i < API_BASE_URLS.length; i++) {
+    const base = API_BASE_URLS[i];
     try {
-      // TEMP DEBUG: log which base URL and Authorization header are being used
+      // Debug logging: use console.debug to reduce noise in Console; add index for fallbacks
       try {
         // eslint-disable-next-line no-console
-        console.log(`[apiFetch] request -> ${base}${endpoint}`, {
-          hasToken: !!token,
-          tokenPrefix: token ? token.substring(0, 20) + '...' : 'no token',
-          authHeader: headers['Authorization'] ? 'present' : 'missing'
-        });
+        if (i === 0) {
+          console.debug(`[apiFetch] request -> ${base}${endpoint}`, {
+            hasToken: !!token,
+            tokenPrefix: token ? token.substring(0, 20) + '...' : 'no token',
+            authHeader: headers['Authorization'] ? 'present' : 'missing'
+          });
+        } else {
+          console.debug(`[apiFetch] fallback request (${i}) -> ${base}${endpoint}`, {
+            hasToken: !!token,
+            authHeader: headers['Authorization'] ? 'present' : 'missing'
+          });
+        }
       } catch (_) {}
       const response = await fetch(`${base}${endpoint}`, config);
 
@@ -113,6 +124,12 @@ async function apiFetch<T>(
         // Nếu 401 (Unauthorized) xảy ra, thử refresh token (trừ khi đây là endpoint auth)
         const isAuthEndpoint = endpoint.startsWith('/api/v1/auth');
         if (response.status === 401 && !isAuthEndpoint) {
+          // Add explicit logging so developer can see the sequence:
+          // request -> 401 -> attempt refresh -> retry -> success/fail
+          try {
+            // eslint-disable-next-line no-console
+            console.warn(`[apiFetch] 401 Unauthorized for ${base}${endpoint} — attempting token refresh`);
+          } catch (_) {}
           // Try refresh once using the same base URL
           try {
             // Deduplicate concurrent refreshes
@@ -145,11 +162,24 @@ async function apiFetch<T>(
               const retryResp = await fetch(`${base}${endpoint}`, { ...config, headers: retryHeaders });
               if (retryResp.ok) {
                 const data = await retryResp.json();
+                try {
+                  // eslint-disable-next-line no-console
+                  console.info(`[apiFetch] Retry successful for ${base}${endpoint} after refresh`);
+                } catch (_) {}
                 return data as T;
               }
-              // If retry failed, fall through to error handling below
+              // If retry failed, log it for debugging then fall through to error handling below
+              try {
+                const retryText = await retryResp.text().catch(() => '<no-body>');
+                // eslint-disable-next-line no-console
+                console.error(`[apiFetch] Retry failed for ${base}${endpoint}: ${retryResp.status} ${retryText}`);
+              } catch (_) {}
             } else {
               // Refresh failed -> clear tokens to avoid repeated failing requests
+              try {
+                // eslint-disable-next-line no-console
+                console.error(`[apiFetch] Token refresh failed for ${base}. Clearing stored tokens.`);
+              } catch (_) {}
               removeAuthToken();
             }
           } catch (e) {

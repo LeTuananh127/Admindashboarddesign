@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
@@ -25,6 +25,7 @@ export function UsersManagement({ dataRefreshTrigger = 0 }: { dataRefreshTrigger
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(0);
+  const isFetchingRef = useRef(false);
   const [pageSize] = useState(20); // 20 users per page
   const [totalUsers, setTotalUsers] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
@@ -38,6 +39,12 @@ export function UsersManagement({ dataRefreshTrigger = 0 }: { dataRefreshTrigger
       return;
     }
     
+    // Avoid concurrent duplicate calls
+    if (isFetchingRef.current) {
+      console.debug('[UsersManagement] loadUsers already running — skipping duplicate call');
+      return;
+    }
+
     try {
       // Backend expects 1-based `page`; convert UI 0-based to 1-based
       const response: PaginatedResponse<User> = await getAllUsers({
@@ -68,6 +75,7 @@ export function UsersManagement({ dataRefreshTrigger = 0 }: { dataRefreshTrigger
       toast.error('Không thể tải danh sách người dùng');
       setUsers([]);
     } finally {
+      isFetchingRef.current = false;
       setLoading(false);
     }
   };
