@@ -39,16 +39,30 @@ export function UsersManagement({ dataRefreshTrigger = 0 }: { dataRefreshTrigger
     }
     
     try {
+      // Backend expects 1-based `page`; convert UI 0-based to 1-based
       const response: PaginatedResponse<User> = await getAllUsers({
-        page,
+        page: page + 1,
         pageSize,
         search: searchTerm || undefined,
         status: statusFilter === 'all' ? undefined : statusFilter,
       });
-      setUsers(response.data);
+      // Client-side ID-aware filtering: if searchTerm matches an id, ensure id matches are included
+      let usersList = response.data || [];
+      if (searchTerm && searchTerm.trim().length > 0) {
+        const q = searchTerm.trim().toLowerCase();
+        usersList = usersList.filter(u => {
+          return (
+            (u.id || '').toLowerCase().includes(q) ||
+            (u.full_name || '').toLowerCase().includes(q) ||
+            (u.phone || '').toLowerCase().includes(q)
+          );
+        });
+      }
+      setUsers(usersList);
       setTotalUsers(response.metadata.total);
       setTotalPages(response.metadata.totalPages);
-      setCurrentPage(response.metadata.page);
+      // Convert backend 1-based page back to 0-based for UI
+      setCurrentPage(Math.max(0, response.metadata.page - 1));
     } catch (error) {
       console.error('Failed to load users:', error);
       toast.error('Không thể tải danh sách người dùng');
@@ -156,7 +170,7 @@ export function UsersManagement({ dataRefreshTrigger = 0 }: { dataRefreshTrigger
         </div>
         <div className="flex items-center gap-2">
           <Filter className="w-4 h-4 text-muted-foreground" />
-          <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as 'active' | 'suspended' | 'banned' | 'all')}>
+          <Select value={statusFilter} onValueChange={(value: string) => setStatusFilter(value as 'active' | 'suspended' | 'banned' | 'all')}>
             <SelectTrigger className="w-40">
               <SelectValue placeholder="Lọc theo trạng thái" />
             </SelectTrigger>

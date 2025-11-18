@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { AdminLayout } from './components/AdminLayout';
 import { UsersManagement } from './components/UsersManagement';
 import { ServicesManagement } from './components/ServicesManagement';
+import { Reports } from './components/Reports';
 import { Dashboard } from './components/Dashboard';
 import { LoginPage } from './components/LoginPage';
 import { toast } from 'sonner';
 
-type Page = 'dashboard' | 'users' | 'services';
+type Page = 'dashboard' | 'users' | 'services' | 'reports';
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -52,6 +53,8 @@ export default function App() {
         return <UsersManagement key={`users-${dataRefreshTrigger}`} dataRefreshTrigger={dataRefreshTrigger} />;
       case 'services':
         return <ServicesManagement key={`services-${dataRefreshTrigger}`} dataRefreshTrigger={dataRefreshTrigger} />;
+      case 'reports':
+        return <Reports key={`reports-${dataRefreshTrigger}`} />;
       default:
         return <Dashboard key={`dashboard-${dataRefreshTrigger}`} />;
     }
