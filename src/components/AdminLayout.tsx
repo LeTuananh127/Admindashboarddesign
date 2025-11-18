@@ -1,10 +1,10 @@
 import React from 'react';
-import { LayoutDashboard, Users, Settings, Menu, LogOut } from 'lucide-react';
+import { LayoutDashboard, Users, Settings, Menu, LogOut, FileText } from 'lucide-react';
 import { Button } from './ui/button';
 import { Sheet, SheetContent, SheetTrigger } from './ui/sheet';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from './ui/alert-dialog';
 
-type Page = 'dashboard' | 'users' | 'services';
+type Page = 'dashboard' | 'users' | 'services' | 'reports';
 
 interface AdminLayoutProps {
   currentPage: Page;
@@ -18,6 +18,7 @@ export function AdminLayout({ currentPage, onPageChange, onLogout, children }: A
     { id: 'dashboard' as Page, label: 'Trang chủ', icon: LayoutDashboard },
     { id: 'users' as Page, label: 'Quản lý tài khoản', icon: Users },
     { id: 'services' as Page, label: 'Quản lý dịch vụ', icon: Settings },
+    { id: 'reports' as Page, label: 'Báo cáo', icon: FileText },
   ];
 
   const SidebarContent = () => (

@@ -13,7 +13,8 @@ import { getAllJobs, type Job } from '../lib/jobs.api';
 type Visibility = 'public' | 'private';
 type ServiceStatus = 'open' | 'pending' | 'matched' | 'completed' | 'cancelled' | 'expired' | 'banned';
 
-interface Service extends Job {
+interface Service extends Omit<Job, 'status'> {
+  status: ServiceStatus;
   tags: string[];
 }
 
@@ -30,120 +31,7 @@ const availableTags = [
   'Chăm sóc',
 ];
 
-const mockServices: Service[] = [
-  {
-    id: 'srv_1',
-    user_id: 'usr_1',
-    title: 'Dịch vụ sửa chữa điện tử',
-    description: 'Sửa chữa các thiết bị điện tử, điện thoại, máy tính',
-    region_code: 'HN',
-    place: 'Hà Nội',
-    preferred_start: '2025-10-25T09:00',
-    time: 120,
-    slot: 60,
-    visibility: 'public',
-    status: 'open',
-    tags: ['Sửa chữa', 'Công nghệ'],
-    created_at: '2025-01-15',
-    updated_at: '2025-01-15',
-  },
-  {
-    id: 'srv_2',
-    user_id: 'usr_2',
-    title: 'Dạy kèm tiếng Anh',
-    description: 'Dạy kèm tiếng Anh cho học sinh cấp 2, cấp 3',
-    region_code: 'HCM',
-    place: 'TP. Hồ Chí Minh',
-    preferred_start: '2025-10-26T14:00',
-    time: 90,
-    slot: 45,
-    visibility: 'public',
-    status: 'matched',
-    tags: ['Giáo dục'],
-    created_at: '2025-01-20',
-    updated_at: '2025-02-01',
-  },
-  {
-    id: 'srv_3',
-    user_id: 'usr_3',
-    title: 'Thiết kế đồ họa',
-    description: 'Thiết kế logo, banner, poster chuyên nghiệp',
-    region_code: 'DN',
-    place: 'Đà Nẵng',
-    preferred_start: '2025-10-27T10:00',
-    time: 180,
-    slot: 90,
-    visibility: 'private',
-    status: 'pending',
-    tags: ['Thiết kế', 'Công nghệ'],
-    created_at: '2025-02-01',
-    updated_at: '2025-02-10',
-  },
-  {
-    id: 'srv_4',
-    user_id: 'usr_1',
-    title: 'Giúp việc nhà theo giờ',
-    description: 'Dọn dẹp nhà cửa, nấu ăn, giặt là',
-    region_code: 'HN',
-    place: 'Hà Nội',
-    preferred_start: '2025-10-28T08:00',
-    time: 240,
-    slot: 120,
-    visibility: 'public',
-    status: 'banned',
-    tags: ['Việc nhà', 'Nội trợ', 'Chăm sóc'],
-    created_at: '2025-02-05',
-    updated_at: '2025-02-15',
-  },
-  {
-    id: 'srv_5',
-    user_id: 'usr_4',
-    title: 'Tư vấn marketing online',
-    description: 'Tư vấn chiến lược marketing, quảng cáo Facebook, Google',
-    region_code: 'HCM',
-    place: 'TP. Hồ Chí Minh',
-    preferred_start: '2025-11-01T10:00',
-    time: 120,
-    slot: 60,
-    visibility: 'public',
-    status: 'completed',
-    tags: ['Tư vấn', 'Công nghệ'],
-    created_at: '2025-01-10',
-    updated_at: '2025-01-25',
-  },
-  {
-    id: 'srv_6',
-    user_id: 'usr_2',
-    title: 'Chăm sóc người cao tuổi',
-    description: 'Chăm sóc, đi lại, ăn uống cho người cao tuổi',
-    region_code: 'HN',
-    place: 'Hà Nội',
-    preferred_start: '2025-09-15T08:00',
-    time: 480,
-    slot: 240,
-    visibility: 'public',
-    status: 'expired',
-    tags: ['Chăm sóc', 'Y tế'],
-    created_at: '2025-01-05',
-    updated_at: '2025-01-20',
-  },
-  {
-    id: 'srv_7',
-    user_id: 'usr_5',
-    title: 'Vận chuyển hàng hóa nội thành',
-    description: 'Dịch vụ vận chuyển hàng hóa, đồ đạc trong nội thành',
-    region_code: 'DN',
-    place: 'Đà Nẵng',
-    preferred_start: '2025-11-05T07:00',
-    time: 180,
-    slot: 60,
-    visibility: 'public',
-    status: 'cancelled',
-    tags: ['Vận chuyển'],
-    created_at: '2025-02-01',
-    updated_at: '2025-02-08',
-  },
-];
+// Removed local mockServices — the app will use real data from the backend
 
 export function ServicesManagement({ dataRefreshTrigger = 0 }: { dataRefreshTrigger?: number }) {
   const [services, setServices] = useState<Service[]>([]);
@@ -163,14 +51,20 @@ export function ServicesManagement({ dataRefreshTrigger = 0 }: { dataRefreshTrig
     // Check if we have a token before making API call
     const token = localStorage.getItem('access_token');
     if (!token) {
-      console.log('[ServicesManagement] No token found, skipping API call');
+      console.log('[ServicesManagement] No token found — not fetching services');
+      toast.info('Vui lòng đăng nhập để xem danh sách dịch vụ');
+      setServices([]);
+      setTotalServices(0);
+      setTotalPages(0);
+      setCurrentPage(0);
       setLoading(false);
       return;
     }
     
     try {
+      // Backend expects 1-based `page` for admin endpoints; convert UI 0-based `page` to 1-based
       const response = await getAllJobs({
-        page,
+        page: page + 1,
         pageSize,
         search: searchTerm || undefined,
         type: filterStatus !== 'all' ? [filterStatus as any] : undefined,
@@ -179,14 +73,35 @@ export function ServicesManagement({ dataRefreshTrigger = 0 }: { dataRefreshTrig
         ...job,
         tags: job.skills?.map(skill => skill.name) || []
       }));
-      setServices(transformedServices);
+
+      // Client-side ID-aware filtering: if user typed an id, include matches by id/user_id as well
+      let displayed = transformedServices;
+      if (searchTerm && searchTerm.trim().length > 0) {
+        const q = searchTerm.trim().toLowerCase();
+        displayed = transformedServices.filter((s) => {
+          return (
+            (s.id || '').toLowerCase().includes(q) ||
+            (s.user_id || '').toLowerCase().includes(q) ||
+            (s.title || '').toLowerCase().includes(q) ||
+            (s.place || '').toLowerCase().includes(q) ||
+            (s.tags || []).join(' ').toLowerCase().includes(q)
+          );
+        });
+      }
+
+      setServices(displayed);
       setTotalServices(response.metadata.total);
       setTotalPages(response.metadata.totalPages);
-      setCurrentPage(response.metadata.page);
+      // Convert backend 1-based page back to 0-based for UI state
+      setCurrentPage(Math.max(0, response.metadata.page - 1));
     } catch (error) {
       console.error('Failed to load services:', error);
       toast.error('Không thể tải danh sách dịch vụ');
+      // On error, show empty list — real data should come from backend
       setServices([]);
+      setTotalServices(0);
+      setTotalPages(0);
+      setCurrentPage(0);
     } finally {
       setLoading(false);
     }
@@ -415,7 +330,7 @@ export function ServicesManagement({ dataRefreshTrigger = 0 }: { dataRefreshTrig
 
       {/* View Service Dialog */}
       <Dialog open={!!viewingService} onOpenChange={() => setViewingService(null)}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-4xl">
           <DialogHeader>
             <DialogTitle>Chi tiết dịch vụ</DialogTitle>
           </DialogHeader>
@@ -431,10 +346,10 @@ export function ServicesManagement({ dataRefreshTrigger = 0 }: { dataRefreshTrig
                   <p>{viewingService.user_id}</p>
                 </div>
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground mb-1">Tiêu đề</p>
-                <p>{viewingService.title}</p>
-              </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-1 font-semibold">Tiêu đề</p>
+                      <p>{viewingService.title}</p>
+                  </div>
               <div>
                 <p className="text-sm text-muted-foreground mb-1">Mô tả</p>
                 <p>{viewingService.description || 'Không có mô tả'}</p>
