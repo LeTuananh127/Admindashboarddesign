@@ -66,6 +66,12 @@ export async function getReportById(id: string): Promise<Report & { targetDetail
   return apiGet(`/api/v1/reports/${id}`);
 }
 
-export async function updateReportStatus(id: string, status: string, admin_note?: string) {
-  return apiPatch(`/api/v1/reports/admin/reports/${id}`, { status, admin_note });
+
+export interface UpdateReportStatusDto {
+  status: string;
+  admin_note?: string;
+}
+
+export async function updateReportStatus(id: string, dto: UpdateReportStatusDto) {
+  return apiPatch(`/api/v1/reports/admin/reports/${id}`, dto);
 }

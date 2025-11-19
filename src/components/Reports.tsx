@@ -5,8 +5,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Input } from './ui/input';
 import { Badge } from './ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { getReports, getReportById, updateReportStatus, type Report } from '../lib/reports.api';
-import { getJobDetail } from '../lib/jobs.api';
+// Import API logic mới
+import { getReports, getReportById, type Report, updateReportStatus } from '../lib/reports.api';
+import { getJobDetail, getServiceImages } from '../lib/jobs.api';
+import { apiGet, apiPatch } from '../lib/api'; 
 import { getUserDetail } from '../lib/users.api';
 import { toast } from 'sonner';
 import { Search } from 'lucide-react';
@@ -21,6 +23,14 @@ export function Reports() {
   const [viewing, setViewing] = useState<any | null>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [viewingTarget, setViewingTarget] = useState<any | null>(null);
+  const [serviceImageUrls, setServiceImageUrls] = useState<string[]>([]);
+  
+  // Warning states
+  const [warningOpen, setWarningOpen] = useState(false);
+  const [warningText, setWarningText] = useState('');
+  const [warningReport, setWarningReport] = useState<any | null>(null);
+  const [warningSending, setWarningSending] = useState(false);
+  
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterTarget, setFilterTarget] = useState<string>('all');
@@ -28,14 +38,14 @@ export function Reports() {
   const load = async (page = 0) => {
     setLoading(true);
     try {
-      // Backend expects 1-based page
       const params: any = { page: page + 1, pageSize };
       if (filterStatus && filterStatus !== 'all') params.status = filterStatus;
       if (filterTarget && filterTarget !== 'all') params.target_type = filterTarget;
 
       const res = await getReports(params);
-      // apply client-side search on returned page
       let items = res.data;
+      
+      // Client-side search logic
       if (searchTerm && searchTerm.trim().length > 0) {
         const q = searchTerm.trim().toLowerCase();
         items = items.filter((r: any) => {
@@ -45,14 +55,14 @@ export function Reports() {
           const td = (r as any).targetDetails;
           const targetTitle = td?.title ?? td?.full_name ?? '';
           return (
-            r.reason?.toLowerCase().includes(q) ||
+            (r.reason?.toLowerCase() || '').includes(q) ||
             reporterName.toLowerCase().includes(q) ||
             reporterId.toLowerCase().includes(q) ||
             reportId.toLowerCase().includes(q) ||
             (r.target_id || '').toLowerCase().includes(q) ||
             targetTitle.toLowerCase().includes(q)
           );
-      });
+        });
       }
 
       setReports(items);
@@ -63,8 +73,6 @@ export function Reports() {
       console.error('Failed to load reports', e);
       toast.error('Không thể tải báo cáo');
       setReports([]);
-      setTotalReports(0);
-      setTotalPages(0);
     } finally {
       setLoading(false);
     }
@@ -72,7 +80,6 @@ export function Reports() {
 
   useEffect(() => { load(0); }, []);
 
-  // debounce search & filter changes (500ms)
   useEffect(() => {
     const t = setTimeout(() => load(0), 500);
     return () => clearTimeout(t);
@@ -95,36 +102,88 @@ export function Reports() {
         setViewingTarget({ type: 'service', details: svc });
         return;
       }
-
       if (targetType === 'user') {
         const user = await getUserDetail(targetId);
         setViewingTarget({ type: 'user', details: user });
         return;
       }
-
-      // fallback: try to use existing viewing.targetDetails if present
       if (viewing?.targetDetails) {
         setViewingTarget({ type: targetType, details: viewing.targetDetails });
         return;
       }
-
       toast.error('Không tìm thấy thông tin chi tiết cho đối tượng');
     } catch (err) {
-      console.error('Failed to fetch target details', err);
+      console.error(err);
       toast.error('Không thể tải chi tiết đối tượng');
     }
   };
 
-  // no explicit submit; search is debounced above
+  // Service Image Logic
+  useEffect(() => {
+    let mounted = true;
+    const loadServiceImages = async () => {
+      setServiceImageUrls([]);
+      if (!viewingTarget || viewingTarget.type !== 'service') return;
+      const t = viewingTarget.details || {};
 
-  const markResolved = async (id: string) => {
+      try {
+        const svcId = t.id || t.job_id || t.jobId || viewingTarget.id || viewingTarget.details?.id;
+        if (svcId) {
+          const fetched = await getServiceImages(String(svcId));
+          if (Array.isArray(fetched) && fetched.length > 0 && mounted) {
+            setServiceImageUrls(fetched);
+            return;
+          }
+        }
+      } catch (err) { /* ignore */ }
+      
+      // Fallback extraction logic
+      const urls: string[] = [];
+      const pushUrl = (u: any) => {
+        if (!u) return;
+        if (typeof u === 'string' && u.startsWith('http')) urls.push(u);
+      };
+
+      if (Array.isArray(t.image_urls)) t.image_urls.forEach(pushUrl);
+      if (Array.isArray(t.images)) {
+        t.images.forEach((it: any) => {
+          if (typeof it === 'string') pushUrl(it);
+          else if (it && it.url) pushUrl(it.url);
+          else if (it && it.image_url) pushUrl(it.image_url);
+          else if (it && it.id) urls.push(String(it.id));
+        });
+      }
+      // ... (các logic extract khác giữ nguyên)
+
+      // Simplified fetching for raw IDs if needed
+      const finalUrls: string[] = urls.filter(u => u.startsWith('http'));
+      if (mounted) setServiceImageUrls(finalUrls);
+    };
+    loadServiceImages();
+    return () => { mounted = false; };
+  }, [viewingTarget]);
+
+  // --- HÀM GỬI CẢNH BÁO (LOGIC MỚI) ---
+  const handleSendWarning = async () => {
+    if (!warningReport) return;
     try {
-      await updateReportStatus(id, 'resolved');
-      toast.success('Đã cập nhật trạng thái');
+      setWarningSending(true);
+      
+      // Gọi API Patch status + admin_note
+      await updateReportStatus(warningReport.id, {
+        status: 'resolved', 
+        admin_note: warningText
+      });
+
+      toast.success('Đã gửi cảnh báo và cập nhật trạng thái thành công');
+      setWarningOpen(false);
+      setWarningReport(null);
       load(currentPage);
     } catch (e) {
-      console.error(e);
-      toast.error('Không thể cập nhật trạng thái');
+      console.error('Failed to send warning', e);
+      toast.error('Lỗi khi gửi cảnh báo');
+    } finally {
+      setWarningSending(false);
     }
   };
 
@@ -132,28 +191,20 @@ export function Reports() {
     if (!val) return '—';
     const s = String(val);
     const visible = s.slice(-last);
-    const masked = s.length > last ? '*'.repeat(s.length - last) : '*'.repeat(s.length);
-    return masked + visible;
+    return (s.length > last ? '*'.repeat(s.length - last) : '*'.repeat(s.length)) + visible;
   };
 
-  const lowerOrDash = (v: any) => {
-    if (v === undefined || v === null || v === '') return '—';
-    return String(v).toLowerCase();
-  };
+  const lowerOrDash = (v: any) => (v === undefined || v === null || v === '') ? '—' : String(v).toLowerCase();
 
   const renderStatusBadge = (s: string | undefined | null) => {
     const key = (s || '').toLowerCase();
-    // Map known statuses to label + Badge variant (match ServicesManagement getStatusBadge)
     const map: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
-      // report statuses
       pending: { label: 'Chờ xử lý', variant: 'secondary' },
       reviewing: { label: 'Đang xem xét', variant: 'secondary' },
       resolved: { label: 'Đã xử lý', variant: 'outline' },
       rejected: { label: 'Bị từ chối', variant: 'destructive' },
-      // user statuses
       active: { label: 'Hoạt động', variant: 'default' },
       banned: { label: 'Đã cấm', variant: 'destructive' },
-      // service-like statuses (for consistency)
       open: { label: 'Đang mở', variant: 'default' },
       matched: { label: 'Đã ghép', variant: 'default' },
       completed: { label: 'Hoàn thành', variant: 'outline' },
@@ -161,9 +212,9 @@ export function Reports() {
       expired: { label: 'Hết hạn', variant: 'destructive' },
     };
     const entry = map[key];
-    if (entry) return <Badge variant={entry.variant} className="w-28 justify-center">{entry.label}</Badge>;
-    // fallback: show raw status capitalized inside a neutral badge
-    return <Badge variant="outline" className="w-24 justify-center">{s ? String(s).toString() : '—'}</Badge>;
+    return entry 
+      ? <Badge variant={entry.variant} className="w-28 justify-center">{entry.label}</Badge> 
+      : <Badge variant="outline" className="w-24 justify-center">{s || '—'}</Badge>;
   };
 
   return (
@@ -173,23 +224,19 @@ export function Reports() {
         <p className="text-muted-foreground">Danh sách báo cáo từ người dùng</p>
       </div>
 
-      {/* Search & filters: match ServicesManagement UI */}
+      {/* Search & Filters */}
       <div className="flex items-center gap-3">
         <div className="relative flex-1 min-w-0">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             placeholder="Tìm: tiêu đề, địa điểm, tags, ID, người báo, tên đối tượng"
-            aria-label="Tìm kiếm báo cáo"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10"
           />
         </div>
-
-        <Select value={filterStatus} onValueChange={(v: string) => setFilterStatus(v)}>
-          <SelectTrigger className="w-[140px]">
-            <SelectValue placeholder="Tất cả" />
-          </SelectTrigger>
+        <Select value={filterStatus} onValueChange={setFilterStatus}>
+          <SelectTrigger className="w-[140px]"><SelectValue placeholder="Tất cả" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Tất cả</SelectItem>
             <SelectItem value="pending">pending</SelectItem>
@@ -198,11 +245,8 @@ export function Reports() {
             <SelectItem value="rejected">rejected</SelectItem>
           </SelectContent>
         </Select>
-
-        <Select value={filterTarget} onValueChange={(v: string) => setFilterTarget(v)}>
-          <SelectTrigger className="w-[120px]">
-            <SelectValue placeholder="Tất cả" />
-          </SelectTrigger>
+        <Select value={filterTarget} onValueChange={setFilterTarget}>
+          <SelectTrigger className="w-[120px]"><SelectValue placeholder="Tất cả" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Tất cả</SelectItem>
             <SelectItem value="user">user</SelectItem>
@@ -210,8 +254,9 @@ export function Reports() {
             <SelectItem value="other">other</SelectItem>
           </SelectContent>
         </Select>
-        </div>
+      </div>
 
+      {/* Table */}
       {loading ? (
         <div className="p-8 text-center">Đang tải báo cáo...</div>
       ) : (
@@ -230,9 +275,7 @@ export function Reports() {
             </TableHeader>
             <TableBody>
               {reports.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground">Không có báo cáo</TableCell>
-                </TableRow>
+                <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">Không có báo cáo</TableCell></TableRow>
               ) : (
                 reports.map(r => (
                   <TableRow key={r.id}>
@@ -245,6 +288,12 @@ export function Reports() {
                     <TableCell className="text-center">
                       <div className="flex justify-center gap-2">
                         <Button variant="outline" size="sm" onClick={() => openReport(r.id)}>Xem</Button>
+                        <Button variant="destructive" size="sm" onClick={() => {
+                          const pre = `Người dùng bị cảnh báo vì lý do: ${r.reason || '...'}\nĐề nghị người dùng không lặp lại hành động đó!`;
+                          setWarningText(pre);
+                          setWarningReport(r);
+                          setWarningOpen(true);
+                        }}>Cảnh báo</Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -255,7 +304,7 @@ export function Reports() {
         </div>
       )}
 
-      {/* Pagination */}
+      {/* Pagination (Đã khôi phục UI) */}
       {!loading && totalPages > 1 && (
         <div className="flex items-center justify-between mt-4">
           <div className="text-sm text-muted-foreground">Hiển thị {reports.length} trong tổng {totalReports} báo cáo</div>
@@ -267,6 +316,7 @@ export function Reports() {
         </div>
       )}
 
+      {/* Report Detail Dialog (Đã khôi phục UI) */}
       <Dialog open={!!viewing} onOpenChange={() => setViewing(null)}>
         <DialogContent className="max-w-4xl">
           <DialogHeader>
@@ -289,8 +339,6 @@ export function Reports() {
                 <Button variant="ghost" size="sm" onClick={() => fetchTargetDetails(viewing.target_type, viewing.target_id)}>Xem chi tiết đối tượng</Button>
               </div>
 
-              {/* Hiển thị thông tin chi tiết của đối tượng (chỉ hiển thị tóm tắt tại đây).
-                  Chi tiết đầy đủ sẽ mở trong dialog "Chi tiết đối tượng" khi người dùng nhấn "Xem chi tiết đối tượng". */}
               {viewing.targetDetails && (() => {
                 const td = viewing.targetDetails as any;
                 const name = td.title ?? td.full_name ?? td.name ?? '—';
@@ -313,7 +361,6 @@ export function Reports() {
                 <span className="ml-2">{renderStatusBadge(viewing.status)}</span>
               </div>
 
-              {/* Hiển thị ảnh đính kèm nếu có */}
               {(() => {
                 const attachments = viewing.attachments;
                 let imageUrls: string[] = [];
@@ -350,7 +397,7 @@ export function Reports() {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog to show full target details */}
+      {/* Target Detail Dialog (Đã khôi phục UI) */}
       <Dialog open={!!viewingTarget} onOpenChange={() => setViewingTarget(null)}>
         <DialogContent className="max-w-4xl">
           <DialogHeader>
@@ -376,10 +423,6 @@ export function Reports() {
 
               return (
                 <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
-                  <div className="mb-2">
-                    <div className="text-xl font-semibold">{title}</div>
-                    <div className="text-xs font-mono text-muted-foreground">{lowerOrDash(t.id ?? t.job_id)}</div>
-                  </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <p className="text-sm text-muted-foreground mb-1">ID</p>
@@ -454,6 +497,22 @@ export function Reports() {
                       <p>{t.updated_at ?? '—'}</p>
                     </div>
                   </div>
+                  {serviceImageUrls.length > 0 && (
+                    <div>
+                      <p className="text-sm text-muted-foreground mt-4 mb-2"><strong>Ảnh dịch vụ</strong></p>
+                      <div className="grid grid-cols-3 gap-2">
+                        {serviceImageUrls.map((u: string) => (
+                          <img
+                            key={u}
+                            src={u}
+                            alt="service"
+                            className="w-full h-28 object-cover rounded-md cursor-pointer hover:scale-105 transition-transform"
+                            onClick={() => setLightboxUrl(u)}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             }
@@ -546,12 +605,45 @@ export function Reports() {
         </DialogContent>
       </Dialog>
 
-      {/* Lightbox dialog for enlarged image */}
+      {/* Warning Dialog (Fix lỗi TypeScript: open: boolean) */}
+      <Dialog open={warningOpen} onOpenChange={(open: boolean) => { if (!warningSending && !open) setWarningOpen(false); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Gửi cảnh báo & Xử lý</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Hành động này sẽ gửi thông báo tới người dùng và chuyển trạng thái báo cáo thành <b>Đã xử lý (Resolved)</b>.
+            </p>
+            <div>
+              <label className="text-sm font-medium mb-1 block" htmlFor="warningText">Nội dung cảnh báo (Admin Note)</label>
+              <textarea
+                id="warningText"
+                aria-label="Nội dung cảnh báo"
+                value={warningText}
+                onChange={(e) => setWarningText(e.target.value)}
+                className="w-full h-32 p-2 border rounded-md resize-y focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            <div className="text-sm text-muted-foreground">
+              Người nhận (Target ID): <span className="font-mono">{warningReport?.target_id || '—'}</span>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => { if (!warningSending) { setWarningOpen(false); setWarningReport(null); } }}>Hủy</Button>
+            <Button disabled={warningSending} onClick={handleSendWarning}>
+              {warningSending ? 'Đang gửi...' : 'Gửi cảnh báo'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Lightbox Dialog */}
       <Dialog open={!!lightboxUrl} onOpenChange={() => setLightboxUrl(null)}>
-        <DialogContent className="max-w-4xl p-0">
-          <div className="w-full flex items-center justify-center bg-black">
+        <DialogContent className="max-w-4xl p-0 bg-transparent border-none shadow-none">
+          <div className="w-full flex items-center justify-center">
             {lightboxUrl && (
-              <img src={lightboxUrl} alt="enlarged" className="w-full max-h-[80vh] object-contain" />
+              <img src={lightboxUrl} alt="enlarged" className="max-w-full max-h-[85vh] object-contain rounded-md" />
             )}
           </div>
         </DialogContent>

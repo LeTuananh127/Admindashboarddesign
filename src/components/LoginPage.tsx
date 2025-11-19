@@ -88,7 +88,6 @@ export function LoginPage({ onLogin }: LoginPageProps) {
             </Button>
           </form>
           <div className="mt-6 text-center text-sm text-muted-foreground">
-            <p>Demo: admin / admin123</p>
           </div>
         </CardContent>
       </Card>
